@@ -8,6 +8,10 @@ The most valuable field, `redacted_description`, is **not** in the search feed: 
 from a separate Product Detail Page (PDP) request. See
 [docs/redacted_description.md](docs/redacted_description.md) for how that works.
 
+Heat maps of the collected listings are rendered by the `analytics` module. Some
+cities resolve to a single Facebook coordinate and create misleadingly dense cells;
+see [docs/location_geocoding_outliers.md](docs/location_geocoding_outliers.md).
+
 ## Quick start
 
 ```bash
