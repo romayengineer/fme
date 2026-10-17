@@ -103,15 +103,24 @@ from the captured Marketplace responses and materialized into
 [redacted_description.md](redacted_description.md) for how those responses are
 intercepted and merged.
 
-## Mitigations (not implemented)
+## Mitigation
 
-Options if the artifact should not dominate the map:
+`-min-repeat N` (default `5`, `0` disables) drops every coordinate shared by at
+least `N` listings **within the same city**. The city is keyed by the geocode id
+(`LocationGeocodeCityID`, falling back to `LocationGeocodeCityName2`), so a default
+centroid like the Buenos Aires point is removed while a genuine street-level pin in
+a different city at the same coordinate is kept. Listings with no city information
+are never dropped.
+
+Implementation: `DropCityCentroids` (`go/analytics/source/cityfilter.go`), wired
+through `pipeline.Options.MinRepeatCount` (`go/analytics/pipeline/run.go:59`); the
+run summary reports `dropped: N city-level`.
+
+Other options, not implemented:
 
 1. **Annotate** the cell (e.g. tooltip "city-level location / approximate") instead of
    hiding the data.
-2. **Detect city-centroid fallbacks** — flag coordinates that are exact duplicates
-   across many listings, or that match a known city geocode point, and separate or
-   exclude them.
-3. **Exclude flagged points from intensity scaling** so they do not set `MaxCount`.
-4. **Jitter** defaulted points slightly so one fake hotspot does not dominate
+2. **Exclude flagged points from intensity scaling** so they do not set `MaxCount`,
+   keeping them visible but neutral for the color scale.
+3. **Jitter** defaulted points slightly so one fake hotspot does not dominate
    normalization.
