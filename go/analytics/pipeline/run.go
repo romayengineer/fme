@@ -20,13 +20,14 @@ const MapAll = "all"
 
 // Options configures a heatmap run.
 type Options struct {
-	Dir      string  // detail files dir; defaults to data/__Details
-	CellDeg  float64 // grid cell size in degrees; defaults to heatmap.DefaultCellDeg
-	OutBase  string  // output path without extension; defaults to DefaultOutBase
-	Title    string  // map/page title
-	Workers  int     // file read concurrency; defaults to GOMAXPROCS
-	Map      string  // map id, "all", or "" for the default map
-	MapToken string  // API token; falls back to the map's TokenEnv
+	Dir            string  // detail files dir; defaults to data/__Details
+	CellDeg        float64 // grid cell size in degrees; defaults to heatmap.DefaultCellDeg
+	OutBase        string  // output path without extension; defaults to DefaultOutBase
+	Title          string  // map/page title
+	Workers        int     // file read concurrency; defaults to GOMAXPROCS
+	Map            string  // map id, "all", or "" for the default map
+	MapToken       string  // API token; falls back to the map's TokenEnv
+	MinRepeatCount int     // drop coordinates repeated >= N times in one city; 0 disables
 }
 
 // Result describes what a run produced.
@@ -56,7 +57,11 @@ func RunFileHeatmap(opts Options) (Result, error) {
 	}
 
 	src := &source.FileSource{Dir: opts.Dir, Workers: opts.Workers}
-	grid := heatmap.Aggregate(src, heatmap.Options{CellDeg: opts.CellDeg})
+	var points analytics.PointSource = src
+	if opts.MinRepeatCount > 0 {
+		points = source.DropCityCentroids(src, opts.MinRepeatCount)
+	}
+	grid := heatmap.Aggregate(points, heatmap.Options{CellDeg: opts.CellDeg})
 
 	geojson, err := grid.GeoJSON()
 	if err != nil {
@@ -78,7 +83,7 @@ func RunFileHeatmap(opts Options) (Result, error) {
 		MapID:       opts.Map,
 		GeoJSONPath: geojsonPath,
 		Grid:        grid,
-		Stats:       src.Stats(),
+		Stats:       sourceStats(points),
 	}
 	if result.MapID == "" {
 		result.MapID = heatmap.DefaultMapID
@@ -105,6 +110,14 @@ func RunFileHeatmap(opts Options) (Result, error) {
 	}
 
 	return result, nil
+}
+
+// sourceStats reports coverage from a source that implements StatsSource.
+func sourceStats(src analytics.PointSource) analytics.Stats {
+	if s, ok := src.(analytics.StatsSource); ok {
+		return s.Stats()
+	}
+	return analytics.Stats{}
 }
 
 // resolveMaps turns the -map selector into a concrete, ordered list of map ids.

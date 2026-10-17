@@ -17,11 +17,12 @@ import (
 // 127.0.0.1 gives the browser a real origin and the tiles load normally.
 func runHeatmapServe(flags Flags) {
 	result, err := pipeline.RunFileHeatmap(pipeline.Options{
-		Dir:      flags.dir,
-		CellDeg:  flags.cellDeg,
-		OutBase:  flags.out,
-		Map:      flags.mapID,
-		MapToken: flags.mapToken,
+		Dir:            flags.dir,
+		CellDeg:        flags.cellDeg,
+		OutBase:        flags.out,
+		Map:            flags.mapID,
+		MapToken:       flags.mapToken,
+		MinRepeatCount: flags.minRepeat,
 	})
 	if err != nil {
 		logging.LogError0("runHeatmapServe", "heat map failed", "error", err)
@@ -29,8 +30,8 @@ func runHeatmapServe(flags Flags) {
 	}
 
 	fmt.Printf("heat map written (map: %s)\n", result.MapID)
-	fmt.Printf("  products:  %d (of %d scanned, %d skipped)\n",
-		result.Stats.Valid, result.Stats.Scanned, result.Stats.Skipped)
+	fmt.Printf("  products:  %d (of %d scanned, %d skipped, %d dropped: city-level)\n",
+		result.Stats.Valid, result.Stats.Scanned, result.Stats.Skipped, result.Stats.Dropped)
 	fmt.Printf("  cells:     %d (peak %d, cell %.4f deg)\n",
 		len(result.Grid.Cells), result.Grid.MaxCount, result.Grid.Options.CellDeg)
 

@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -84,6 +85,37 @@ func TestRunFileHeatmapAllMaps(t *testing.T) {
 		if _, err := os.Stat(p); err != nil {
 			t.Errorf("expected %s to exist: %v", p, err)
 		}
+	}
+}
+
+func TestRunFileHeatmapDropsCityRepeats(t *testing.T) {
+	dir := t.TempDir()
+	for i := 1; i <= 5; i++ {
+		writeDetail(t, dir, fmt.Sprintf("detail_%d.json", i),
+			`{"LocationLatitud": -34.60, "LocationLongitude": -58.42, "LocationGeocodeCityID": "caba"}`)
+	}
+	writeDetail(t, dir, "detail_6.json", `{"LocationLatitud": -34.61, "LocationLongitude": -58.43, "LocationGeocodeCityID": "caba"}`)
+	writeDetail(t, dir, "detail_7.json", `{"LocationLatitud": -34.70, "LocationLongitude": -58.50, "LocationGeocodeCityID": "caba"}`)
+
+	outBase := filepath.Join(t.TempDir(), "heatmap")
+	res, err := RunFileHeatmap(Options{Dir: dir, OutBase: outBase, MinRepeatCount: 5})
+	if err != nil {
+		t.Fatalf("RunFileHeatmap: %v", err)
+	}
+	if res.Stats.Scanned != 7 {
+		t.Errorf("Scanned = %d, want 7", res.Stats.Scanned)
+	}
+	if res.Stats.Dropped != 5 {
+		t.Errorf("Dropped = %d, want 5", res.Stats.Dropped)
+	}
+	if res.Stats.Valid != 2 {
+		t.Errorf("Valid = %d, want 2", res.Stats.Valid)
+	}
+	if res.Grid.Total != 2 {
+		t.Errorf("Total = %d, want 2", res.Grid.Total)
+	}
+	if res.Grid.MaxCount != 1 {
+		t.Errorf("MaxCount = %d, want 1", res.Grid.MaxCount)
 	}
 }
 

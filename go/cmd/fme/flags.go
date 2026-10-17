@@ -24,6 +24,7 @@ type Flags struct {
 	mapID                   string
 	mapToken                string
 	listMaps                bool
+	minRepeat               int
 }
 
 func NewFlags() Flags {
@@ -41,6 +42,7 @@ func NewFlags() Flags {
 	mapID := flag.String("map", "leaflet-carto", "Heat map renderer id, or \"all\" (action=heatmap; see -list-maps)")
 	mapToken := flag.String("map-token", "", "API token for map providers that need one (falls back to the provider env var)")
 	listMaps := flag.Bool("list-maps", false, "List available heat map renderers and exit")
+	minRepeat := flag.Int("min-repeat", 5, "Heat map: drop coordinates repeated >= N times within one city (action=heatmap; 0 disables)")
 	flag.Parse()
 
 	if strings.ToLower(*action) == "search" && *keywords == "" {
@@ -80,5 +82,6 @@ func NewFlags() Flags {
 		mapID:                   *mapID,
 		mapToken:                *mapToken,
 		listMaps:                *listMaps,
+		minRepeat:               *minRepeat,
 	}
 }

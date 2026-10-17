@@ -13,11 +13,12 @@ import (
 // `-action=heatmap -map=<id> -cell=<deg> -out=<base> -dir=<details dir>`.
 func runHeatmap(flags Flags) {
 	result, err := pipeline.RunFileHeatmap(pipeline.Options{
-		Dir:      flags.dir,
-		CellDeg:  flags.cellDeg,
-		OutBase:  flags.out,
-		Map:      flags.mapID,
-		MapToken: flags.mapToken,
+		Dir:            flags.dir,
+		CellDeg:        flags.cellDeg,
+		OutBase:        flags.out,
+		Map:            flags.mapID,
+		MapToken:       flags.mapToken,
+		MinRepeatCount: flags.minRepeat,
 	})
 	if err != nil {
 		logging.LogError0("runHeatmap", "heat map failed", "error", err)
@@ -29,8 +30,8 @@ func runHeatmap(flags Flags) {
 	for _, p := range result.HTMLPaths {
 		fmt.Printf("  html:      %s\n", p)
 	}
-	fmt.Printf("  products:  %d (of %d scanned, %d skipped: no/!valid coords)\n",
-		result.Stats.Valid, result.Stats.Scanned, result.Stats.Skipped)
+	fmt.Printf("  products:  %d (of %d scanned, %d skipped: no/!valid coords, %d dropped: city-level)\n",
+		result.Stats.Valid, result.Stats.Scanned, result.Stats.Skipped, result.Stats.Dropped)
 	fmt.Printf("  cells:     %d (peak %d, cell %.4f deg)\n",
 		len(result.Grid.Cells), result.Grid.MaxCount, result.Grid.Options.CellDeg)
 	fmt.Printf("\ntip: switch basemap with -map=<id> (%s), or open the .html directly\n", joinMapIDs())

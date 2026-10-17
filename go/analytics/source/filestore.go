@@ -21,23 +21,31 @@ const DefaultDir = "data/__Details"
 // files the rest of FME materializes, so heat maps work without the PocketBase
 // database. File reads are parallelized across workers; results are replayed in
 // filename order so aggregation stays deterministic.
+//
+// The located points are read once and cached, so filters that need a first pass
+// over the data (like the city-centroid filter) do not re-read the directory.
 type FileSource struct {
 	Dir     string // defaults to DefaultDir
 	Workers int    // defaults to GOMAXPROCS
 
-	mu    sync.Mutex
-	stats analytics.Stats
+	mu     sync.Mutex
+	stats  analytics.Stats
+	points []analytics.LocatedPoint
+	loaded bool
 }
 
 // detailRecord decodes only the fields we need. The coordinate fields are
 // pointers so JSON null and malformed values are simply skipped.
 type detailRecord struct {
-	LocationLatitud   *float64 `json:"LocationLatitud"`
-	LocationLongitude *float64 `json:"LocationLongitude"`
+	LocationLatitud         *float64 `json:"LocationLatitud"`
+	LocationLongitude       *float64 `json:"LocationLongitude"`
+	LocationGeocodeCityID   *string  `json:"LocationGeocodeCityID"`
+	LocationGeocodeCityName *string  `json:"LocationGeocodeCityName2"`
 }
 
-// Stats returns coverage counters for the last ForEach call.
+// Stats returns coverage counters for the loaded points.
 func (s *FileSource) Stats() analytics.Stats {
+	s.locate()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.stats
@@ -45,6 +53,36 @@ func (s *FileSource) Stats() analytics.Stats {
 
 // ForEach implements analytics.PointSource.
 func (s *FileSource) ForEach(fn func(analytics.GeoPoint) bool) int {
+	emitted := 0
+	for _, p := range s.locate() {
+		if !fn(p.GeoPoint) {
+			break
+		}
+		emitted++
+	}
+	return emitted
+}
+
+// ForEachLocated implements analytics.LocatedSource.
+func (s *FileSource) ForEachLocated(fn func(analytics.LocatedPoint) bool) int {
+	emitted := 0
+	for _, p := range s.locate() {
+		if !fn(p) {
+			break
+		}
+		emitted++
+	}
+	return emitted
+}
+
+// locate reads and caches the located points exactly once.
+func (s *FileSource) locate() []analytics.LocatedPoint {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.loaded {
+		return s.points
+	}
+
 	dir := s.Dir
 	if dir == "" {
 		dir = DefaultDir
@@ -54,23 +92,15 @@ func (s *FileSource) ForEach(fn func(analytics.GeoPoint) bool) int {
 		workers = runtime.GOMAXPROCS(0)
 	}
 
-	paths := detailFiles(dir)
-	points := s.readAll(paths, workers)
-
-	emitted := 0
-	for _, p := range points {
-		if !fn(p) {
-			break
-		}
-		emitted++
-	}
-	return emitted
+	s.points, s.stats = readAll(detailFiles(dir), workers)
+	s.loaded = true
+	return s.points
 }
 
-// readAll reads the given files concurrently and returns the valid points in the
-// same order as paths.
-func (s *FileSource) readAll(paths []string, workers int) []analytics.GeoPoint {
-	results := make([][]analytics.GeoPoint, len(paths))
+// readAll reads the given files concurrently and returns the valid points (with
+// their city) in the same order as paths, plus coverage stats.
+func readAll(paths []string, workers int) ([]analytics.LocatedPoint, analytics.Stats) {
+	results := make([][]analytics.LocatedPoint, len(paths))
 	scanned := make([]bool, len(paths))
 
 	jobs := make(chan int)
@@ -91,21 +121,19 @@ func (s *FileSource) readAll(paths []string, workers int) []analytics.GeoPoint {
 	close(jobs)
 	wg.Wait()
 
-	s.mu.Lock()
-	s.stats = analytics.Stats{}
-	points := make([]analytics.GeoPoint, 0, len(paths))
+	var stats analytics.Stats
+	points := make([]analytics.LocatedPoint, 0, len(paths))
 	for i := range paths {
 		if !scanned[i] {
 			continue
 		}
-		s.stats.Scanned++
+		stats.Scanned++
 		points = append(points, results[i]...)
 	}
-	s.stats.Valid = len(points)
-	s.stats.Skipped = s.stats.Scanned - s.stats.Valid
-	s.mu.Unlock()
+	stats.Valid = len(points)
+	stats.Skipped = stats.Scanned - stats.Valid
 
-	return points
+	return points, stats
 }
 
 // detailFiles lists data/__Details entries in deterministic (sorted) order.
@@ -131,7 +159,7 @@ func detailFiles(dir string) []string {
 
 // readPoints parses one detail file and returns its point, if the coordinates
 // are usable. A missing/invalid file yields no points.
-func readPoints(path string) []analytics.GeoPoint {
+func readPoints(path string) []analytics.LocatedPoint {
 	body, err := os.ReadFile(path)
 	if err != nil {
 		return nil
@@ -147,7 +175,23 @@ func readPoints(path string) []analytics.GeoPoint {
 	if !validCoord(lat, lon) {
 		return nil
 	}
-	return []analytics.GeoPoint{{Lat: lat, Lon: lon}}
+	return []analytics.LocatedPoint{{
+		GeoPoint: analytics.GeoPoint{Lat: lat, Lon: lon},
+		City:     cityKey(rec.LocationGeocodeCityID, rec.LocationGeocodeCityName),
+	}}
+}
+
+// cityKey builds the stable grouping key for a listing's city. The geocode id is
+// preferred because it is language- and format-stable; the display name is the
+// fallback when the id is absent. An empty key means the city is unknown.
+func cityKey(id, name *string) string {
+	if id != nil && *id != "" {
+		return *id
+	}
+	if name != nil && *name != "" {
+		return *name
+	}
+	return ""
 }
 
 // validCoord rejects out-of-range values and Facebook's (0,0) "unknown"
