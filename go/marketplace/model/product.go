@@ -156,6 +156,29 @@ func IsErrorRateLimit(data any) bool {
 	return false
 }
 
+// ProductGone reports whether a Marketplace PDP payload proves the listing no
+// longer exists. Facebook returns the PDP container
+// (data.viewer.marketplace_product_details_page) but with no listing inside it when
+// the item has been removed. Detection is deliberately narrow so a login wall, a
+// rate-limit reply, or any other non-PDP payload is never treated as gone.
+//
+// The returned reason is a short tag for logging ("null_container" or "no_target").
+func ProductGone(data any) (reason string, ok bool) {
+	container, present := jsonutil.Lookup(data, "data.viewer.marketplace_product_details_page")
+	if !present {
+		return "", false
+	}
+	if container == nil {
+		return "null_container", true
+	}
+
+	id, hasID := jsonutil.Lookup(data, "data.viewer.marketplace_product_details_page.target.id")
+	if !hasID || id == nil {
+		return "no_target", true
+	}
+	return "", false
+}
+
 // ProductDetailsValid reports whether the GraphQL payload is a Marketplace PDP
 // (product detail page) response. See ProductDetailsGet for the requirements to
 // obtain a PDP response containing `redacted_description`.

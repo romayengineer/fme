@@ -8,23 +8,32 @@ import (
 // GetKey walks a dotted path into nested map[string]any data and returns the value,
 // or nil if any segment is missing or not a map.
 func GetKey(data any, path string) any {
+	value, _ := Lookup(data, path)
+	return value
+}
+
+// Lookup walks a dotted path into nested map[string]any data and returns the value
+// at that path plus whether the full key chain exists. Unlike GetKey it distinguishes
+// a present-but-null value (present=true, value=nil) from a missing key
+// (present=false), which is needed to tell "target is null" from "no target field".
+func Lookup(data any, path string) (any, bool) {
 	keys := strings.Split(path, ".")
 
 	current := data
 	for _, key := range keys {
 		dataMap, ok := current.(map[string]any)
 		if !ok {
-			return nil
+			return nil, false
 		}
 
 		value, ok := dataMap[key]
 		if !ok {
-			return nil
+			return nil, false
 		}
 		current = value
 	}
 
-	return current
+	return current, true
 }
 
 // ExtractJsonFromBody parses either a single JSON object or newline-delimited JSON

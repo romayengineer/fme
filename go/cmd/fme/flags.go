@@ -25,6 +25,7 @@ type Flags struct {
 	mapToken                string
 	listMaps                bool
 	minRepeat               int
+	retryUnavailable        bool
 }
 
 func NewFlags() Flags {
@@ -43,6 +44,7 @@ func NewFlags() Flags {
 	mapToken := flag.String("map-token", "", "API token for map providers that need one (falls back to the provider env var)")
 	listMaps := flag.Bool("list-maps", false, "List available heat map renderers and exit")
 	minRepeat := flag.Int("min-repeat", 5, "Heat map: drop coordinates repeated >= N times within one city (action=heatmap; 0 disables)")
+	retryUnavailable := flag.Bool("retry-unavailable", false, "pull_description: retry listings previously marked as no longer existing")
 	flag.Parse()
 
 	if strings.ToLower(*action) == "search" && *keywords == "" {
@@ -83,5 +85,6 @@ func NewFlags() Flags {
 		mapToken:                *mapToken,
 		listMaps:                *listMaps,
 		minRepeat:               *minRepeat,
+		retryUnavailable:        *retryUnavailable,
 	}
 }

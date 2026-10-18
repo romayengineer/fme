@@ -23,6 +23,7 @@ type ScrapperImpl struct {
 	DelayMs                 int
 	RateLimitWaitSeconds    int
 	MaxRateLimitWaitSeconds int
+	RetryUnavailable        bool
 	SearchKewords           string
 	StartTimeToProcess      int64
 }
@@ -47,6 +48,7 @@ func NewScrapper(flags Flags) ScrapperImpl {
 		DelayMs:                 flags.delayMs,
 		RateLimitWaitSeconds:    flags.rateLimitWaitSeconds,
 		MaxRateLimitWaitSeconds: flags.maxRateLimitWaitSeconds,
+		RetryUnavailable:        flags.retryUnavailable,
 		StartTimeToProcess:      0,
 		SearchKewords:           flags.keywords,
 	}
@@ -151,8 +153,19 @@ func (s *ScrapperImpl) PullDescriptions() {
 	existingPDPIds := filestore.LoadPDPProductIds()
 	logging.LogInfo0("PullDescriptions", "loaded existing PDP responses", "count", len(existingPDPIds))
 
+	// Listings known to be gone are skipped unless the caller explicitly asks to
+	// retry them (e.g. after a re-post).
+	unavailableIds := map[string]struct{}{}
+	if s.RetryUnavailable {
+		logging.LogInfo0("PullDescriptions", "retrying previously unavailable listings", "flag", "-retry-unavailable")
+	} else {
+		unavailableIds = filestore.LoadUnavailableProductIds()
+	}
+	logging.LogInfo0("PullDescriptions", "loaded unavailable listings", "count", len(unavailableIds))
+
 	pulled := 0
 	skipped := 0
+	unavailable := 0
 	waitedSeconds := 0
 	rateLimited := false
 	filestore.ForEachDetail(func(filePath string, jsonData map[string]any) bool {
@@ -176,18 +189,52 @@ func (s *ScrapperImpl) PullDescriptions() {
 			return true
 		}
 
-		gotRateLimit, waited, err := s.fetchPDPWithBackoff(page, template, productIdStr)
+		// Known to no longer exist: skip instead of failing every run.
+		if _, exists := unavailableIds[productIdStr]; exists {
+			unavailable++
+			return true
+		}
+
+		outcome, waited, err := s.fetchPDPWithBackoff(page, template, productIdStr)
 		waitedSeconds += waited
 		if err != nil {
 			logging.LogError0("PullDescriptions", "Error fetching PDP", "productId", productIdStr, "error", err)
 			return true
 		}
-		if gotRateLimit {
+		if outcome.RateLimited {
 			logging.LogWarn0("PullDescriptions", "rate limit did not clear, stopping", "pulled", pulled, "waitedSec", waitedSeconds)
 			rateLimited = true
 			return false
 		}
+		if outcome.Gone {
+			if err := filestore.MarkUnavailable(productIdStr); err != nil {
+				logging.LogError0("PullDescriptions", "could not mark unavailable", "productId", productIdStr, "error", err)
+			}
+			unavailableIds[productIdStr] = struct{}{}
+			unavailable++
+			logging.LogWarn0("PullDescriptions", "listing no longer exists, skipping future runs", "productId", productIdStr)
+			return true
+		}
+		if outcome.NoProduct {
+			if became, count := filestore.RecordPDPFailure(productIdStr, filestore.DefaultMissThreshold); became {
+				unavailableIds[productIdStr] = struct{}{}
+				unavailable++
+				logging.LogWarn0("PullDescriptions", "no listing after repeated attempts, marking unavailable",
+					"productId", productIdStr, "misses", count)
+			} else {
+				logging.LogWarn0("PullDescriptions", "PDP response had no listing, will retry",
+					"productId", productIdStr, "misses", count, "threshold", filestore.DefaultMissThreshold)
+			}
+			return true
+		}
 
+		// Success: clear any failure state and remember the response.
+		filestore.ClearPDPFailure(productIdStr)
+		if s.RetryUnavailable {
+			if err := filestore.ClearUnavailable(productIdStr); err != nil {
+				logging.LogError0("PullDescriptions", "could not clear unavailable marker", "productId", productIdStr, "error", err)
+			}
+		}
 		existingPDPIds[productIdStr] = struct{}{}
 		pulled++
 		if pulled%50 == 0 {
@@ -199,7 +246,7 @@ func (s *ScrapperImpl) PullDescriptions() {
 		return true
 	}, false)
 
-	logging.LogInfo0("PullDescriptions", "finished", "pulled", pulled, "skipped", skipped, "rateLimited", rateLimited)
+	logging.LogInfo0("PullDescriptions", "finished", "pulled", pulled, "skipped", skipped, "unavailable", unavailable, "rateLimited", rateLimited)
 	if rateLimited {
 		logging.LogWarn0("PullDescriptions", "stopped early on rate limit; progress is saved, re-run later to continue (optionally -delay-ms=N)")
 	}
@@ -211,24 +258,24 @@ func (s *ScrapperImpl) PullDescriptions() {
 // code 1675004), waits and retries the same product until the limit clears or the
 // per-run waiting budget (MaxRateLimitWaitSeconds) is exhausted. This makes a
 // transient throttle pause the run instead of aborting it, while still saving all
-// progress if the limit does not clear. Returns (rateLimited, waitedSeconds, err).
-func (s *ScrapperImpl) fetchPDPWithBackoff(page driver.PageWrapperInterface, template *capture.PDPTemplate, productId string) (bool, int, error) {
+// progress if the limit does not clear. Returns (outcome, waitedSeconds, err).
+func (s *ScrapperImpl) fetchPDPWithBackoff(page driver.PageWrapperInterface, template *capture.PDPTemplate, productId string) (capture.PDPOutcome, int, error) {
 	waited := 0
 	wait := s.RateLimitWaitSeconds
 	for {
-		gotRateLimit, err := capture.FetchPDP(page, template, productId)
+		outcome, err := capture.FetchPDP(page, template, productId)
 		if err != nil {
-			return false, waited, err
+			return outcome, waited, err
 		}
-		if !gotRateLimit {
-			return false, waited, nil
+		if !outcome.RateLimited {
+			return outcome, waited, nil
 		}
 
 		if s.RateLimitWaitSeconds <= 0 {
-			return true, waited, nil
+			return outcome, waited, nil
 		}
 		if waited+wait > s.MaxRateLimitWaitSeconds {
-			return true, waited, nil
+			return outcome, waited, nil
 		}
 
 		// Exponential backoff (capped) so frequent retries do not keep the throttle

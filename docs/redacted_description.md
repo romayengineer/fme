@@ -106,6 +106,31 @@ creates duplicates. If duplicates ever appear, `just dedupe-pdp` removes them
 - Pulling stops (without failing the run) on the rate-limit error, so a very large
   batch may need more than one run. Use `-delay-ms` to slow it down if needed.
 
+## Removed listings
+
+Some listings can never be filled because they no longer exist on Facebook. Their
+PDP request succeeds but the reply has no listing inside it, so `FetchPDP` cannot
+extract a product and the detail record stays without a description. Without help
+these would be retried on every run.
+
+`pull-description` now remembers them:
+
+- A confirmed dead listing (PDP container present but no target) writes a tombstone
+  `data/MarketplacePDPContainerQuery/unavailable_0_<id>.json` and is skipped on later
+  runs.
+- An **ambiguous** reply (fetched, no listing, not a rate limit) increments
+  `data/MarketplacePDPContainerQuery/miss_0_<id>.json`; after `DefaultMissThreshold`
+  (3) misses it becomes a tombstone too.
+- The raw body of any non-product PDP reply is saved to
+  `data/MarketplacePDPContainerQuery/debug/miss_<id>.json` so the payload can be
+  inspected.
+- The run summary reports how many listings were skipped as `unavailable`.
+
+To retry them (for example after a listing is re-posted), run
+`just run -action=pull_description -retry-unavailable` or delete the tombstone
+files. A successful fetch clears the failure state and tombstone.
+
+
 ## Facebook throttling (`1675004`)
 
 Facebook sometimes answers the PDP GraphQL request with HTTP 200 and

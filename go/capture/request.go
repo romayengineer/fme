@@ -112,23 +112,31 @@ func mapKeys(m map[string]string) []string {
 	return keys
 }
 
+// PDPOutcome reports the result of a FetchPDP replay.
+type PDPOutcome struct {
+	RateLimited bool // Facebook rate-limited the request
+	Gone        bool // the listing no longer exists (definitive)
+	NoProduct   bool // fetched but no listing was found (ambiguous failure)
+}
+
 // FetchPDP replays the captured MarketplacePDPContainerQuery template for a single
 // product by replacing variables.targetId and running the request inside the
 // logged-in page (so it uses the browser's own cookies, origin and CSRF tokens).
-// It persists the response and reports whether it was a rate-limit error.
+// It persists the response and reports whether it was rate-limited, whether the
+// listing is gone, or whether the reply carried no product.
 //
 // The request must run in the page: Facebook rejects the replayed GraphQL request
 // with error 1357054 when it is issued outside the page context (e.g. via an
 // APIRequestContext), even though the body and headers are identical.
-func FetchPDP(page driver.PageWrapperInterface, template *PDPTemplate, productId string) (bool, error) {
+func FetchPDP(page driver.PageWrapperInterface, template *PDPTemplate, productId string) (PDPOutcome, error) {
 	postDataMap := template.PostDataMap.Clone()
 	if err := postDataMap.SetJsonString("variables", "targetId", productId); err != nil {
-		return false, fmt.Errorf("error setting targetId: %w", err)
+		return PDPOutcome{}, fmt.Errorf("error setting targetId: %w", err)
 	}
 
 	postData, err := GetPostData(postDataMap)
 	if err != nil {
-		return false, fmt.Errorf("error building post data: %w", err)
+		return PDPOutcome{}, fmt.Errorf("error building post data: %w", err)
 	}
 
 	headers := map[string]any{}
@@ -151,33 +159,49 @@ func FetchPDP(page driver.PageWrapperInterface, template *PDPTemplate, productId
 		"body":    postData,
 	})
 	if err != nil {
-		return false, fmt.Errorf("error evaluating fetch: %w", err)
+		return PDPOutcome{}, fmt.Errorf("error evaluating fetch: %w", err)
 	}
 
 	bodyStr, ok := result.(string)
 	if !ok {
-		return false, fmt.Errorf("unexpected fetch result type %T", result)
+		return PDPOutcome{}, fmt.Errorf("unexpected fetch result type %T", result)
 	}
 
 	body := []byte(strings.TrimPrefix(bodyStr, "for (;;);"))
 	jsonDatas, err := jsonutil.ExtractJsonFromBody(body)
 	if err != nil {
-		return false, fmt.Errorf("error ExtractJsonFromBody: %w", err)
+		return PDPOutcome{}, fmt.Errorf("error ExtractJsonFromBody: %w", err)
 	}
 
 	for _, jsonData := range jsonDatas {
 		if model.IsErrorRateLimit(jsonData) {
-			return true, nil
+			return PDPOutcome{RateLimited: true}, nil
 		}
 	}
 
-	if _, err := filestore.WriteJsonResponseById(jsonDatas, "MarketplacePDPContainerQuery", productId); err != nil {
-		return false, fmt.Errorf("error WriteJsonResponseById: %w", err)
+	// A PDP container with no listing inside means the item was removed. Do not
+	// write a response file (ProcessData would just delete it); save the raw body
+	// for inspection and let the caller tombstone the id.
+	for _, jsonData := range jsonDatas {
+		if reason, gone := model.ProductGone(jsonData); gone {
+			logging.LogWarn0("FetchPDP", "listing no longer exists", "productId", productId, "reason", reason)
+			_ = filestore.WriteDebugMiss(productId, body)
+			return PDPOutcome{Gone: true}, nil
+		}
 	}
 
 	// Merge the description into data/__Details immediately so it is filled as soon
 	// as the response arrives, even if the run is interrupted before ProcessData.
-	filestore.SaveProductsFrom(jsonDatas)
+	if saved := filestore.SaveProductsFrom(jsonDatas); saved == 0 {
+		// No product and not a rate limit: an ambiguous failure. Save the raw body
+		// and report it so the caller can count it and eventually skip the listing.
+		_ = filestore.WriteDebugMiss(productId, body)
+		return PDPOutcome{NoProduct: true}, nil
+	}
 
-	return false, nil
+	if _, err := filestore.WriteJsonResponseById(jsonDatas, "MarketplacePDPContainerQuery", productId); err != nil {
+		return PDPOutcome{}, fmt.Errorf("error WriteJsonResponseById: %w", err)
+	}
+
+	return PDPOutcome{}, nil
 }
