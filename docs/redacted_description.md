@@ -58,8 +58,8 @@ Two commands, normally run in order:
 
 ### `just search "keyword"` — collect listings
 1. Log in with the seeded Chrome profile (`FME_USER_DATA_DIR`).
-2. `MarketpaceSearch` navigates to the Marketplace search URL and scrolls
-   (bounded by `-scroll-seconds`).
+2. `MarketpaceSearch` navigates to the Marketplace search URL and scrolls, stopping
+   only after `-scroll-seconds` (default 240) pass with no increase in page height.
 3. Search responses are captured as `CometMarketplaceSearchContentPaginationQuery`.
 4. `ProcessData` runs at the end of the search and extracts them into
    `data/__Details/detail_<id>.json` (without descriptions), so searching alone

@@ -76,27 +76,22 @@ func (pl *Pages) WaitForHomePage(timeoutSeconds int) bool {
 
 func (pl *Pages) ScrollDown(maxSeconds int) error {
 	maxScrollHeight := 0
-	failCounter := 0
-	maxFailCounter := 10
 	start := time.Now()
+	lastIncrease := start
 	for {
-		if maxSeconds > 0 && time.Since(start) >= time.Duration(maxSeconds)*time.Second {
-			logging.LogInfo0("ScrollDown", "max scroll time reached", "seconds", maxSeconds, "maxScrollHeight", maxScrollHeight)
+		// Stop only after the page height has failed to grow for maxSeconds.
+		if maxSeconds > 0 && time.Since(lastIncrease) >= time.Duration(maxSeconds)*time.Second {
+			logging.LogInfo0("ScrollDown", "no height increase, stopping",
+				"waitedSeconds", maxSeconds, "elapsedSeconds", int(time.Since(start).Seconds()), "maxScrollHeight", maxScrollHeight)
 			return nil
 		}
 		scrollHeight, _ := pl.Page.Evaluate("document.body.scrollHeight")
 		if intHeight, ok := scrollHeight.(int); ok {
 			if intHeight > maxScrollHeight {
-				failCounter = 0
+				lastIncrease = time.Now()
 				maxScrollHeight = intHeight
 				logging.LogDebug0("ScrollDown", "maxScrollHeight", "height", maxScrollHeight)
-			} else {
-				failCounter++
 			}
-		}
-		if failCounter >= maxFailCounter {
-			logging.LogInfo0("ScrollDown", "maxScrollHeight did not increase", "failCounter", failCounter, "maxScrollHeight", maxScrollHeight)
-			return nil
 		}
 		time.Sleep(1 * time.Second)
 		pl.Page.Evaluate("window.scrollTo(0, document.body.scrollHeight)")

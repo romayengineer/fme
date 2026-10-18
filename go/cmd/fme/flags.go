@@ -32,7 +32,7 @@ func NewFlags() Flags {
 	action := flag.String("action", "search", "Action to perform: search, pull_description, get_details, save, process_data, dedupe_pdp, fill_empty, description_stats, heatmap, heatmap_serve, install_drivers, serve")
 	keywords := flag.String("keywords", "", "Keywords to search for (required when -action is search)")
 	logLevel := flag.String("log-level", "debug", "Log level: debug, info, warn, error")
-	scrollSeconds := flag.Int("scroll-seconds", 60, "Max seconds to scroll search results before opening a product")
+	scrollSeconds := flag.Int("scroll-seconds", 240, "Max seconds to keep scrolling while the results stop growing (action=search)")
 	delayMs := flag.Int("delay-ms", 1000, "Delay in milliseconds between replayed description requests (action=pull_description)")
 	rateLimitWaitSeconds := flag.Int("rate-limit-wait", 300, "Seconds to wait before retrying a rate-limited request (action=pull_description; 0 disables waiting)")
 	maxRateLimitWaitSeconds := flag.Int("max-rate-limit-wait", 1800, "Max total seconds to keep waiting for the rate limit to clear within a run (action=pull_description)")
