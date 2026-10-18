@@ -315,6 +315,36 @@ func LoadPDPProductIds() map[string]struct{} {
 	return ids
 }
 
+// PendingDescriptionCount reports how many detail records still need a PDP fetch
+// (Description is JSON null), split by why they would otherwise be skipped: their
+// id already has a captured PDP response, or the listing is tombstoned as
+// no-longer-available. A present Description (including an empty string) counts as
+// done, matching the pull_description loop.
+func PendingDescriptionCount(existing, unavailable map[string]struct{}) (pending, alreadyFetched, unavailableCount int) {
+	ForEachDetail(func(_ string, jsonData map[string]any) bool {
+		if jsonutil.GetKey(jsonData, "Description") != nil {
+			return true
+		}
+
+		id, _ := jsonutil.GetKey(jsonData, "ID").(string)
+		if id == "" {
+			return true
+		}
+		if _, ok := unavailable[id]; ok {
+			unavailableCount++
+			return true
+		}
+		if _, ok := existing[id]; ok {
+			alreadyFetched++
+			return true
+		}
+
+		pending++
+		return true
+	}, false)
+	return pending, alreadyFetched, unavailableCount
+}
+
 // DedupePDP removes duplicate PDP response files, keeping only the most recently
 // modified file for each product id.
 func DedupePDP() {

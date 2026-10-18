@@ -122,32 +122,11 @@ func (s *ScrapperImpl) SearchProducts() {
 // MarketplacePDPContainerQuery request template; the rest is replayed via ctx.Fetch.
 // See docs/redacted_description.md.
 func (s *ScrapperImpl) PullDescriptions() {
-	ctx, err := s.Begin()
-	if err != nil {
-		logging.LogError0("PullDescriptions", "Error in Begin", "error", err)
-		os.Exit(1)
-	}
-	defer ctx.Close()
-
-	page, _ := ctx.NewPage()
-	pgs, _ := pages.NewPages(page)
-
-	// Materialize any as-yet-unprocessed search responses into data/__Details first,
-	// so listings found by a recent `search` run are included in this fill pass.
+	// Materialize any as-yet-unprocessed search responses into data/__Details first
+	// (no browser needed), so listings found by a recent `search` run are included
+	// in this fill pass.
 	if _, err := filestore.ProcessData(0); err != nil {
 		logging.LogError0("PullDescriptions", "Error in ProcessData", "error", err)
-	}
-
-	if err := pgs.MarketplaceHome(); err != nil {
-		logging.LogError0("PullDescriptions", "Error opening marketplace", "error", err)
-		return
-	}
-
-	fmt.Println("Opening a listing to capture the PDP request template...")
-	template := s.capturePDPTemplate(pgs, page)
-	if template == nil {
-		logging.LogError0("PullDescriptions", "did not capture the PDP request template", "hint", "Facebook is likely throttling this session (error 1675004); wait and retry later")
-		return
 	}
 
 	existingPDPIds := filestore.LoadPDPProductIds()
@@ -163,6 +142,38 @@ func (s *ScrapperImpl) PullDescriptions() {
 	}
 	logging.LogInfo0("PullDescriptions", "loaded unavailable listings", "count", len(unavailableIds))
 
+	// Stop before launching the browser when every remaining listing with a null
+	// description is already fetched or known to be deleted.
+	pending, alreadyFetched, unavailableSkipped := filestore.PendingDescriptionCount(existingPDPIds, unavailableIds)
+	if pending == 0 {
+		fmt.Printf("nothing to pull: %d already fetched, %d unavailable (deleted listings)\n", alreadyFetched, unavailableSkipped)
+		logging.LogInfo0("PullDescriptions", "nothing to pull", "alreadyFetched", alreadyFetched, "unavailable", unavailableSkipped)
+		return
+	}
+	logging.LogInfo0("PullDescriptions", "pending descriptions", "pending", pending)
+
+	ctx, err := s.Begin()
+	if err != nil {
+		logging.LogError0("PullDescriptions", "Error in Begin", "error", err)
+		os.Exit(1)
+	}
+	defer ctx.Close()
+
+	page, _ := ctx.NewPage()
+	pgs, _ := pages.NewPages(page)
+
+	if err := pgs.MarketplaceHome(); err != nil {
+		logging.LogError0("PullDescriptions", "Error opening marketplace", "error", err)
+		return
+	}
+
+	fmt.Println("Opening a listing to capture the PDP request template...")
+	template := s.capturePDPTemplate(pgs, page)
+	if template == nil {
+		logging.LogError0("PullDescriptions", "did not capture the PDP request template", "hint", "Facebook is likely throttling this session (error 1675004); wait and retry later")
+		return
+	}
+
 	pulled := 0
 	skipped := 0
 	unavailable := 0
@@ -170,7 +181,9 @@ func (s *ScrapperImpl) PullDescriptions() {
 	rateLimited := false
 	filestore.ForEachDetail(func(filePath string, jsonData map[string]any) bool {
 		description := jsonutil.GetKey(jsonData, "Description")
-		if description != nil && description != "" {
+		// A present Description (including an empty string) means the PDP was already
+		// fetched; only null/absent descriptions still need pulling.
+		if description != nil {
 			return true
 		}
 

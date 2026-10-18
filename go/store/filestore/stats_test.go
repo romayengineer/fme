@@ -52,6 +52,63 @@ func TestComputeDescriptionStats(t *testing.T) {
 	}
 }
 
+func TestComputeDescriptionStatsUnavailable(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	detailDir := filepath.Join(DataDir, "__Details")
+	if err := os.MkdirAll(detailDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	writeDetail(t, detailDir, "1", "a real description")
+	writeDetail(t, detailDir, "2", nil)
+
+	if err := MarkUnavailable("2"); err != nil {
+		t.Fatalf("MarkUnavailable: %v", err)
+	}
+
+	stats := ComputeDescriptionStats()
+
+	if stats.Total != 2 {
+		t.Errorf("Total = %d, want 2", stats.Total)
+	}
+	if stats.Unavailable != 1 {
+		t.Errorf("Unavailable = %d, want 1", stats.Unavailable)
+	}
+	if stats.Empty != 0 {
+		t.Errorf("Empty = %d, want 0 (deleted listings are not empty)", stats.Empty)
+	}
+	if stats.WithDescription != 1 {
+		t.Errorf("WithDescription = %d, want 1", stats.WithDescription)
+	}
+}
+
+func TestPendingDescriptionCount(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	detailDir := filepath.Join(DataDir, "__Details")
+	if err := os.MkdirAll(detailDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	writeDetail(t, detailDir, "1", "has text")
+	writeDetail(t, detailDir, "2", "")  // empty string counts as done
+	writeDetail(t, detailDir, "3", nil) // already fetched
+	writeDetail(t, detailDir, "4", nil) // unavailable
+	writeDetail(t, detailDir, "5", nil) // pending
+
+	existing := map[string]struct{}{"3": {}}
+	unavailable := map[string]struct{}{"4": {}}
+
+	pending, alreadyFetched, unavailableCount := PendingDescriptionCount(existing, unavailable)
+	if pending != 1 || alreadyFetched != 1 || unavailableCount != 1 {
+		t.Errorf("got pending=%d alreadyFetched=%d unavailable=%d, want 1/1/1",
+			pending, alreadyFetched, unavailableCount)
+	}
+}
+
 func TestComputeDescriptionStatsEmpty(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Chdir(tmpDir)
