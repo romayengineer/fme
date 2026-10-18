@@ -91,8 +91,8 @@ description-stats:
     go run ./{{cmd}} -action=description_stats
 
 # Build a product-density heat map (GeoJSON + HTML) from data/__Details.
-# Pick a basemap with `just heatmap -map=leaflet-esri` (or -map=all), tune the
-# grid with -cell=0.005; output goes to data/analytics/.
+# The only basemap is the keyless Esri one (-map=leaflet-esri, the default); see
+# docs/heatmap_basemaps.md. Tune the grid with -cell=0.005; output goes to data/analytics/.
 # Opening the .html as a file can block map tiles; prefer `just heatmap-serve`.
 heatmap *args:
     go run ./{{cmd}} -action=heatmap {{args}}

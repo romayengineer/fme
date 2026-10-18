@@ -42,9 +42,7 @@ func TestRenderEveryMap(t *testing.T) {
 
 	// Each map must reference its own basemap host.
 	wantHost := map[string]string{
-		"leaflet-carto": "basemaps.cartocdn.com",
-		"leaflet-osm":   "tile.openstreetmap.org",
-		"leaflet-esri":  "server.arcgisonline.com",
+		"leaflet-esri": "server.arcgisonline.com",
 	}
 
 	for _, m := range Maps() {

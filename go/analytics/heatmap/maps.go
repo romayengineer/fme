@@ -12,11 +12,11 @@ import (
 var templateFS embed.FS
 
 // DefaultMapID is the map used when no -map is given.
-const DefaultMapID = "leaflet-carto"
+const DefaultMapID = "leaflet-esri"
 
 // MapInfo describes one selectable map renderer.
 type MapInfo struct {
-	ID            string // selector value, e.g. "leaflet-carto"
+	ID            string // selector value, e.g. "leaflet-esri"
 	Title         string // human-readable name
 	Description   string
 	RequiresToken bool   // true when the provider needs an API key/token
@@ -38,31 +38,19 @@ type mapRenderer struct {
 
 // mapDefs is the ordered registry of built-in maps. Each entry maps to one
 // embedded templates/<file>.
+//
+// Only keyless basemaps are shipped. CARTO and OpenStreetMap were dropped because
+// they require an API key; Esri World Street Map renders without one. See
+// docs/heatmap_basemaps.md.
 var mapDefs = []struct {
 	info MapInfo
 	file string
 }{
 	{
 		info: MapInfo{
-			ID:          "leaflet-carto",
-			Title:       "Leaflet + CARTO",
-			Description: "Leaflet with CARTO light raster basemap (default; no API key).",
-		},
-		file: "leaflet-carto.html",
-	},
-	{
-		info: MapInfo{
-			ID:          "leaflet-osm",
-			Title:       "Leaflet + OpenStreetMap",
-			Description: "Leaflet with OpenStreetMap standard tiles (may be blocked for browser pages).",
-		},
-		file: "leaflet-osm.html",
-	},
-	{
-		info: MapInfo{
 			ID:          "leaflet-esri",
 			Title:       "Leaflet + Esri",
-			Description: "Leaflet with Esri World Street Map tiles (no API key).",
+			Description: "Leaflet with Esri World Street Map tiles (default; no API key).",
 		},
 		file: "leaflet-esri.html",
 	},

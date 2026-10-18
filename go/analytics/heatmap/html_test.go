@@ -7,7 +7,7 @@ import (
 	"github.com/romayengineer/fme/go/analytics"
 )
 
-func TestHTMLUsesNonBlockingBasemap(t *testing.T) {
+func TestHTMLUsesKeylessEsriBasemap(t *testing.T) {
 	src := sliceSource{points: []analytics.GeoPoint{{Lat: -34.6, Lon: -58.4}}}
 	grid := Aggregate(src, Options{CellDeg: 0.01})
 
@@ -16,11 +16,14 @@ func TestHTMLUsesNonBlockingBasemap(t *testing.T) {
 		t.Fatalf("HTML: %v", err)
 	}
 
-	if !bytes.Contains(html, []byte("basemaps.cartocdn.com")) {
-		t.Error("expected CARTO basemap tiles")
+	if !bytes.Contains(html, []byte("server.arcgisonline.com")) {
+		t.Error("expected Esri basemap tiles")
+	}
+	if bytes.Contains(html, []byte("basemaps.cartocdn.com")) {
+		t.Error("must not use CARTO (requires an API key)")
 	}
 	if bytes.Contains(html, []byte("tile.openstreetmap.org")) {
-		t.Error("must not use OSM's volunteer tile server (blocks browser apps)")
+		t.Error("must not use OSM (requires an API key)")
 	}
 	if !bytes.Contains(html, []byte("FeatureCollection")) {
 		t.Error("expected embedded GeoJSON")

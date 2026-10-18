@@ -39,7 +39,7 @@ func NewFlags() Flags {
 	out := flag.String("out", "data/analytics/heatmap", "Heat map output base path without extension (action=heatmap)")
 	dir := flag.String("dir", "", "Detail files directory (action=heatmap; default data/__Details)")
 	addr := flag.String("addr", "127.0.0.1:8799", "HTTP listen address for action=heatmap_serve")
-	mapID := flag.String("map", "leaflet-carto", "Heat map renderer id, or \"all\" (action=heatmap; see -list-maps)")
+	mapID := flag.String("map", "leaflet-esri", "Heat map renderer id, or \"all\" (action=heatmap; see -list-maps)")
 	mapToken := flag.String("map-token", "", "API token for map providers that need one (falls back to the provider env var)")
 	listMaps := flag.Bool("list-maps", false, "List available heat map renderers and exit")
 	minRepeat := flag.Int("min-repeat", 5, "Heat map: drop coordinates repeated >= N times within one city (action=heatmap; 0 disables)")

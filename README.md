@@ -11,6 +11,8 @@ from a separate Product Detail Page (PDP) request. See
 Heat maps of the collected listings are rendered by the `analytics` module. Some
 cities resolve to a single Facebook coordinate and create misleadingly dense cells;
 see [docs/location_geocoding_outliers.md](docs/location_geocoding_outliers.md).
+Only the keyless Esri basemap is built in; see
+[docs/heatmap_basemaps.md](docs/heatmap_basemaps.md).
 
 ## Quick start
 
