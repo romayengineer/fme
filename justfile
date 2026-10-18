@@ -86,7 +86,7 @@ process-data:
 fill-empty:
     go run ./{{cmd}} -action=fill_empty
 
-# Report how many data/__Details listings have no description
+# Report description coverage (with description / unavailable / empty)
 description-stats:
     go run ./{{cmd}} -action=description_stats
 

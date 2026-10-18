@@ -125,6 +125,11 @@ these would be retried on every run.
   `data/MarketplacePDPContainerQuery/debug/miss_<id>.json` so the payload can be
   inspected.
 - The run summary reports how many listings were skipped as `unavailable`.
+- `just description-stats` reports them separately as `unavailable`, so they no
+  longer show up as `empty (null)`.
+- `pull-description` treats a present `Description` (including an empty string) as
+  done. When every remaining null description is already fetched or tombstoned it
+  prints `nothing to pull: ...` and exits **before launching the browser**.
 
 To retry them (for example after a listing is re-posted), run
 `just run -action=pull_description -retry-unavailable` or delete the tombstone
