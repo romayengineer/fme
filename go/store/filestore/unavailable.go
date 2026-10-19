@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/romayengineer/fme/go/core/logging"
+	"github.com/romayengineer/fme/go/store/jsonstore"
 	"github.com/romayengineer/fme/go/store/paths"
 )
 
@@ -122,9 +123,5 @@ func WriteDebugMiss(productId string, body []byte) error {
 }
 
 func writePDPState(name string, v any) error {
-	indented, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		return err
-	}
-	return WriteFileAndDirs(filepath.Join(pdpDir(), name), indented, 0644)
+	return jsonstore.WriteJSONFile(filepath.Join(pdpDir(), name), v, 0644)
 }
