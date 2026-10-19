@@ -7,7 +7,6 @@ import (
 	"github.com/romayengineer/fme/go/app"
 	"github.com/romayengineer/fme/go/browser/facebook"
 	"github.com/romayengineer/fme/go/core/logging"
-	"github.com/romayengineer/fme/go/store/db"
 )
 
 type ScrapperImpl struct {
@@ -141,10 +140,9 @@ func run() error {
 		scrapper.application.DedupePDP()
 		return nil
 	case "serve":
-		_, err := db.Serve()
-		return err
+		return scrapper.application.Serve()
 	case "save":
-		_, err := db.ProcessDataInDB()
+		_, err := scrapper.application.ImportDB()
 		return err
 	case "fill_empty":
 		return scrapper.application.FillEmpty()

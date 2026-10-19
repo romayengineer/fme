@@ -20,7 +20,6 @@ import (
 	"github.com/pocketbase/pocketbase/tools/migrate"
 	"github.com/romayengineer/fme/go/core/logging"
 	"github.com/romayengineer/fme/go/marketplace/model"
-	"github.com/romayengineer/fme/go/store/filestore"
 )
 
 type PocketBaseDB struct {
@@ -470,63 +469,4 @@ func toBool(v any) bool {
 	default:
 		return false
 	}
-}
-
-func Serve() (*PocketBaseDB, error) {
-
-	// need to override the flags because pocketbase reads them
-	os.Args = os.Args[:1]
-	os.Args = append(os.Args, "serve")
-
-	dbInstance, err := GetPocketBaseDB()
-	if err != nil {
-		return dbInstance, err
-	}
-	err = dbInstance.app.Start()
-	if err != nil {
-		return dbInstance, err
-	}
-	return dbInstance, err
-}
-
-func ProcessDataInDB() (int64, error) {
-	var filesProcessedCounter int64
-	var firstErr error
-
-	dbInstance, err := GetPocketBaseDB()
-	if err != nil {
-		return filesProcessedCounter, err
-	}
-	err = dbInstance.Start()
-	if err != nil {
-		return filesProcessedCounter, err
-	}
-
-	_, err = filestore.ForEachDetail(func(filePath string, jsonData map[string]any) bool {
-		product := model.ToMarketplaceItemDetails(jsonData)
-		productIdDb, err := dbInstance.SaveProduct(product)
-
-		if err != nil {
-			logging.LogError0("ProcessDataInDB", "error saving product", "file", filePath, "facebook_id", product.ID, "error", err)
-			if firstErr == nil {
-				firstErr = err
-			}
-			return false
-		}
-
-		logging.LogInfo0("ProcessDataInDB", "saved product in db", "productIdDb", productIdDb, "product.ID", product.ID)
-
-		filesProcessedCounter += 1
-
-		return true
-
-	}, true)
-
-	if err != nil && firstErr == nil {
-		firstErr = err
-	}
-
-	logging.LogInfo0("ProcessDataInDB", "all files processed", "filesProcessedCounter", filesProcessedCounter)
-
-	return filesProcessedCounter, firstErr
 }
