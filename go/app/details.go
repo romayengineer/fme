@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/romayengineer/fme/go/browser/driver"
-	"github.com/romayengineer/fme/go/browser/pages"
+	"github.com/romayengineer/fme/go/browser/marketplace"
 	"github.com/romayengineer/fme/go/core/jsonutil"
 )
 
@@ -48,7 +48,7 @@ func (a *App) GetDetails(opts GetDetailsOptions) error {
 	if err != nil {
 		return fmt.Errorf("get-details: create page: %w", err)
 	}
-	pageHelpers, err := pages.NewPages(page)
+	pageHelpers, err := marketplace.NewPages(page)
 	if err != nil {
 		return fmt.Errorf("get-details: create page helpers: %w", err)
 	}

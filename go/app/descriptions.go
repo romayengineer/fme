@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/romayengineer/fme/go/browser/driver"
-	"github.com/romayengineer/fme/go/browser/pages"
+	"github.com/romayengineer/fme/go/browser/marketplace"
 	"github.com/romayengineer/fme/go/capture"
 	"github.com/romayengineer/fme/go/core/jsonutil"
 	"github.com/romayengineer/fme/go/store/pdpstate"
@@ -81,7 +81,7 @@ func (a *App) PullDescriptions(opts PullDescriptionsOptions) error {
 	if err != nil {
 		return fmt.Errorf("pull-description: create page: %w", err)
 	}
-	pageHelpers, err := pages.NewPages(page)
+	pageHelpers, err := marketplace.NewPages(page)
 	if err != nil {
 		return fmt.Errorf("pull-description: create page helpers: %w", err)
 	}
@@ -244,7 +244,13 @@ func (a *App) fetchPDPWithBackoff(page driver.PageWrapperInterface, template *ca
 
 // capturePDPTemplate clicks listings until the browser issues a
 // MarketplacePDPContainerQuery, which provides the reusable request template.
-func (a *App) capturePDPTemplate(pageHelpers pages.PagesInterface, page driver.PageWrapperInterface) *capture.PDPTemplate {
+// pdpPage is the narrow page surface needed to capture a PDP request template.
+type pdpPage interface {
+	MarketplaceHome() error
+	OpenProduct(index int) bool
+}
+
+func (a *App) capturePDPTemplate(pageHelpers pdpPage, page driver.PageWrapperInterface) *capture.PDPTemplate {
 	const maxAttempts = 6
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		if attempt > 0 {

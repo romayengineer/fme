@@ -1,4 +1,4 @@
-package pages
+package marketplace
 
 import (
 	"fmt"
@@ -19,23 +19,42 @@ type Pages struct {
 	InputSearchBar string
 }
 
-type PagesInterface interface {
+// AuthPage reports whether the Facebook session is usable.
+type AuthPage interface {
 	IsInHomePage() bool
 	WaitForHomePage(timeoutSeconds int) bool
+}
+
+// SearchPage drives the Marketplace search feed.
+type SearchPage interface {
 	MarketpaceSearch(searchKeyworkds string, scrollDown bool, scrollSeconds int) error
 	MarketplaceHome() error
+	ScrollDown(maxSeconds int) error
+}
+
+// ProductPage opens individual Marketplace listings.
+type ProductPage interface {
 	OpenFirstProduct() bool
 	OpenProduct(index int) bool
 	GoToProduct(id string) error
 }
 
+// PagesInterface is the full page-object surface. Consumers should accept the
+// narrow interface they need instead.
+type PagesInterface interface {
+	AuthPage
+	SearchPage
+	ProductPage
+}
+
 func NewPages(page driver.PageWrapperInterface) (PagesInterface, error) {
 	pages := Pages{
-		Page:           page,
-		InputUsername:  "input[name=email]",
-		InputPassword:  "input[name=pass]",
-		ButtonLogIn:    "span:has-text('Log in')",
-		InputSearchBar: "input[placeholder='Buscar en Facebook']",
+		Page:          page,
+		InputUsername: "input[name=email]",
+		InputPassword: "input[name=pass]",
+		ButtonLogIn:   "span:has-text('Log in')",
+		// Match the localized search box in the languages FME is used with.
+		InputSearchBar: "input[placeholder='Buscar en Facebook'], input[aria-label='Search Facebook'], input[placeholder='Search Facebook']",
 	}
 	return &pages, nil
 }

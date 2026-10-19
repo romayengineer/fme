@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/romayengineer/fme/go/browser/driver"
-	"github.com/romayengineer/fme/go/browser/pages"
+	"github.com/romayengineer/fme/go/browser/marketplace"
 	"github.com/romayengineer/fme/go/browser/session"
 	"github.com/romayengineer/fme/go/core/logging"
 )
@@ -57,12 +57,12 @@ func EnsureLoggedIn(ctx driver.ContextWrapperInterface) error {
 		return fmt.Errorf("error Goto: %v", err)
 	}
 
-	pages, err := pages.NewPages(page)
+	pageHelpers, err := marketplace.NewPages(page)
 	if err != nil {
 		return fmt.Errorf("create page helpers: %w", err)
 	}
 	fmt.Println("Waiting for Facebook session...")
-	if !pages.WaitForHomePage(600) {
+	if !pageHelpers.WaitForHomePage(600) {
 		urlAny, _ := page.Evaluate("location.href")
 		return fmt.Errorf("not logged in (url: %v)", urlAny)
 	}
@@ -86,7 +86,7 @@ func (fs *FacebookScrapper) Login(userCredentials UserCredentials) (driver.Conte
 				// Verify session is still valid
 				err = page.Goto("https://www.facebook.com")
 				if err == nil {
-					pageHelpers, err := pages.NewPages(page)
+					pageHelpers, err := marketplace.NewPages(page)
 					if err == nil && pageHelpers.IsInHomePage() {
 						fmt.Println("Session restored successfully")
 						if err := page.Close(); err != nil {
@@ -159,12 +159,12 @@ func (fs *FacebookScrapper) Login(userCredentials UserCredentials) (driver.Conte
 		return nil, fmt.Errorf("click Log In button: %w", err)
 	}
 
-	pages, err := pages.NewPages(page)
+	pageHelpers, err := marketplace.NewPages(page)
 	if err != nil {
 		return nil, fmt.Errorf("create page helpers: %w", err)
 	}
 	fmt.Println("Waiting for login to complete (solve any captcha in the browser)...")
-	if !pages.WaitForHomePage(600) {
+	if !pageHelpers.WaitForHomePage(600) {
 		return nil, fmt.Errorf("not in home page")
 	}
 

@@ -3,7 +3,7 @@ package app
 import (
 	"fmt"
 
-	"github.com/romayengineer/fme/go/browser/pages"
+	"github.com/romayengineer/fme/go/browser/marketplace"
 	"github.com/romayengineer/fme/go/store/filestore"
 )
 
@@ -86,7 +86,7 @@ func (a *App) Search(opts SearchOptions) error {
 		return fmt.Errorf("search: create page: %w", err)
 	}
 
-	pageHelpers, err := pages.NewPages(page)
+	pageHelpers, err := marketplace.NewPages(page)
 	if err != nil {
 		return fmt.Errorf("search: create page helpers: %w", err)
 	}
