@@ -102,11 +102,10 @@ func (s *ScrapperImpl) waitForCapture() {
 	}
 }
 
-func (s *ScrapperImpl) SearchProducts() {
+func (s *ScrapperImpl) SearchProducts() error {
 	ctx, err := s.Begin()
 	if err != nil {
-		logging.LogError0("SearchProducts", "Error in Begin", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("begin search: %w", err)
 	}
 	defer func() {
 		s.waitForCapture()
@@ -115,10 +114,19 @@ func (s *ScrapperImpl) SearchProducts() {
 		}
 	}()
 
-	page, _ := ctx.NewPage()
-	pgs, _ := pages.NewPages(page)
+	page, err := ctx.NewPage()
+	if err != nil {
+		return fmt.Errorf("create search page: %w", err)
+	}
+	pgs, err := pages.NewPages(page)
+	if err != nil {
+		return fmt.Errorf("create page helpers: %w", err)
+	}
+
+	var runErr error
 	if err := pgs.MarketpaceSearch(s.SearchKewords, s.ScrollDownOnSearch, s.ScrollSeconds); err != nil {
 		logging.LogError0("SearchProducts", "Error in MarketpaceSearch", "error", err)
+		runErr = err
 	}
 
 	// Wait for intercepted responses before materializing them.
@@ -129,21 +137,28 @@ func (s *ScrapperImpl) SearchProducts() {
 	// Descriptions are still filled afterwards by pull_description.
 	if _, err := filestore.ProcessData(0); err != nil {
 		logging.LogError0("SearchProducts", "Error in ProcessData", "error", err)
+		if runErr == nil {
+			runErr = err
+		}
 	}
 
 	facebook.WaitingForInput()
+
+	return runErr
 }
 
 // PullDescriptions fetches the description (redacted_description) for every detail
 // file that is missing one. It only needs to open a listing once, to capture the
 // MarketplacePDPContainerQuery request template; the rest is replayed via ctx.Fetch.
 // See docs/redacted_description.md.
-func (s *ScrapperImpl) PullDescriptions() {
+func (s *ScrapperImpl) PullDescriptions() error {
 	// Materialize any as-yet-unprocessed search responses into data/__Details first
 	// (no browser needed), so listings found by a recent `search` run are included
 	// in this fill pass.
+	var runErr error
 	if _, err := filestore.ProcessData(0); err != nil {
 		logging.LogError0("PullDescriptions", "Error in ProcessData", "error", err)
+		runErr = err
 	}
 
 	existingPDPIds := filestore.LoadPDPProductIds()
@@ -163,20 +178,18 @@ func (s *ScrapperImpl) PullDescriptions() {
 	// description is already fetched or known to be deleted.
 	pending, alreadyFetched, unavailableSkipped, err := filestore.PendingDescriptionCount(existingPDPIds, unavailableIds)
 	if err != nil {
-		logging.LogError0("PullDescriptions", "could not scan pending descriptions", "error", err)
-		return
+		return fmt.Errorf("scan pending descriptions: %w", err)
 	}
 	if pending == 0 {
 		fmt.Printf("nothing to pull: %d already fetched, %d unavailable (deleted listings)\n", alreadyFetched, unavailableSkipped)
 		logging.LogInfo0("PullDescriptions", "nothing to pull", "alreadyFetched", alreadyFetched, "unavailable", unavailableSkipped)
-		return
+		return runErr
 	}
 	logging.LogInfo0("PullDescriptions", "pending descriptions", "pending", pending)
 
 	ctx, err := s.Begin()
 	if err != nil {
-		logging.LogError0("PullDescriptions", "Error in Begin", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("begin pull descriptions: %w", err)
 	}
 	defer func() {
 		s.waitForCapture()
@@ -185,19 +198,23 @@ func (s *ScrapperImpl) PullDescriptions() {
 		}
 	}()
 
-	page, _ := ctx.NewPage()
-	pgs, _ := pages.NewPages(page)
+	page, err := ctx.NewPage()
+	if err != nil {
+		return fmt.Errorf("create pull-description page: %w", err)
+	}
+	pgs, err := pages.NewPages(page)
+	if err != nil {
+		return fmt.Errorf("create page helpers: %w", err)
+	}
 
 	if err := pgs.MarketplaceHome(); err != nil {
-		logging.LogError0("PullDescriptions", "Error opening marketplace", "error", err)
-		return
+		return fmt.Errorf("open marketplace home: %w", err)
 	}
 
 	fmt.Println("Opening a listing to capture the PDP request template...")
 	template := s.capturePDPTemplate(pgs, page)
 	if template == nil {
-		logging.LogError0("PullDescriptions", "did not capture the PDP request template", "hint", "Facebook is likely throttling this session (error 1675004); wait and retry later")
-		return
+		return fmt.Errorf("did not capture the PDP request template: Facebook is likely throttling this session (error 1675004); wait and retry later")
 	}
 
 	pulled := 0
@@ -286,6 +303,7 @@ func (s *ScrapperImpl) PullDescriptions() {
 	}, false)
 	if err != nil {
 		logging.LogError0("PullDescriptions", "error iterating detail files", "error", err)
+		runErr = err
 	}
 
 	logging.LogInfo0("PullDescriptions", "finished", "pulled", pulled, "skipped", skipped, "unavailable", unavailable, "rateLimited", rateLimited)
@@ -296,7 +314,12 @@ func (s *ScrapperImpl) PullDescriptions() {
 	s.waitForCapture()
 	if _, err := filestore.ProcessData(0); err != nil {
 		logging.LogError0("PullDescriptions", "error processing responses", "error", err)
+		if runErr == nil {
+			runErr = err
+		}
 	}
+
+	return runErr
 }
 
 // fetchPDPWithBackoff fetches a PDP and, if Facebook rate-limits the request (error
@@ -361,8 +384,10 @@ func (s *ScrapperImpl) capturePDPTemplate(pgs pages.PagesInterface, page driver.
 			return template
 		}
 
-		if throttled, _ := page.Evaluate(`document.body.innerText.includes("This page isn't available right now")`); throttled == true {
-			logging.LogWarn0("PullDescriptions", "Facebook is serving its error page for this session (likely throttled, code 1675004)")
+		if throttled, err := page.Evaluate(`document.body.innerText.includes("This page isn't available right now")`); err == nil {
+			if isThrottled, ok := throttled.(bool); ok && isThrottled {
+				logging.LogWarn0("PullDescriptions", "Facebook is serving its error page for this session (likely throttled, code 1675004)")
+			}
 		}
 		logging.LogWarn0("PullDescriptions", "no PDP request captured, trying another listing", "attempt", attempt)
 	}
@@ -385,12 +410,12 @@ func waitForPDPTemplate(timeoutSeconds int) *capture.PDPTemplate {
 // scrape. It reuses the exact install step Begin performs and is safe to re-run:
 // already-downloaded artifacts are kept. It needs neither a .env nor a Facebook
 // session, so it can run right after cloning.
-func (s *ScrapperImpl) InstallDrivers() {
+func (s *ScrapperImpl) InstallDrivers() error {
 	fmt.Println("Installing Playwright driver and Chromium (this may take a while)...")
 
 	wrapper, err := driver.NewPlaywrightWrapper()
 	if err != nil {
-		logging.LogFatal(fmt.Sprintf("could not install playwright drivers: %v", err))
+		return fmt.Errorf("install playwright drivers: %w", err)
 	}
 
 	if err := wrapper.Stop(); err != nil {
@@ -398,13 +423,13 @@ func (s *ScrapperImpl) InstallDrivers() {
 	}
 
 	logging.LogInfo0("InstallDrivers", "playwright driver and chromium are installed")
+	return nil
 }
 
-func (s *ScrapperImpl) GetDetails() {
+func (s *ScrapperImpl) GetDetails() error {
 	ctx, err := s.Begin()
 	if err != nil {
-		logging.LogError0("GetDetails", "Error in Begin", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("begin get details: %w", err)
 	}
 	defer func() {
 		s.waitForCapture()
@@ -413,8 +438,14 @@ func (s *ScrapperImpl) GetDetails() {
 		}
 	}()
 
-	page, _ := ctx.NewPage()
-	pgs, _ := pages.NewPages(page)
+	page, err := ctx.NewPage()
+	if err != nil {
+		return fmt.Errorf("create get-details page: %w", err)
+	}
+	pgs, err := pages.NewPages(page)
+	if err != nil {
+		return fmt.Errorf("create page helpers: %w", err)
+	}
 
 	_, err = filestore.ForEachDetail(func(filePath string, jsonData map[string]any) bool {
 		PriceAmount := jsonutil.GetKey(jsonData, "PriceAmount")
@@ -445,57 +476,66 @@ func (s *ScrapperImpl) GetDetails() {
 	}
 
 	facebook.WaitingForInput()
+
+	return err
 }
 
 func main() {
-	flags := NewFlags()
+	if err := run(); err != nil {
+		logging.LogError0("main", "action failed", "error", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
+	flags, err := NewFlags()
+	if err != nil {
+		return err
+	}
 	logging.LogInfo0("main", "flags", "action", flags.action)
 
 	if flags.listMaps {
 		printMaps()
-		return
+		return nil
 	}
 
 	scrapper := NewScrapper(flags)
 
 	switch flags.action {
 	case "search":
-		scrapper.SearchProducts()
+		return scrapper.SearchProducts()
 	case "install_drivers":
-		scrapper.InstallDrivers()
+		return scrapper.InstallDrivers()
 	case "pull_description":
-		scrapper.PullDescriptions()
+		return scrapper.PullDescriptions()
 	case "get_details":
-		scrapper.GetDetails()
+		return scrapper.GetDetails()
 	case "process_data":
-		filestore.ProcessData(0)
+		_, err := filestore.ProcessData(0)
+		return err
 	case "dedupe_pdp":
 		filestore.DedupePDP()
+		return nil
 	case "serve":
-		db.Serve()
+		_, err := db.Serve()
+		return err
 	case "save":
 		_, err := db.ProcessDataInDB()
-		if err != nil {
-			logging.LogFatal(err)
-		}
+		return err
 	case "fill_empty":
-		if err := filestore.FillEmpty(); err != nil {
-			logging.LogError0("main", "fill_empty failed", "error", err)
-			os.Exit(1)
-		}
+		return filestore.FillEmpty()
 	case "description_stats":
 		stats, err := filestore.ComputeDescriptionStats()
 		if err != nil {
-			logging.LogError0("main", "description_stats failed", "error", err)
-			os.Exit(1)
+			return err
 		}
 		filestore.PrintDescriptionStats(stats)
+		return nil
 	case "heatmap":
-		runHeatmap(flags)
+		return runHeatmap(flags)
 	case "heatmap_serve":
-		runHeatmapServe(flags)
+		return runHeatmapServe(flags)
 	default:
-		logging.LogError0("main", "Unknown action", "action", flags.action)
-		os.Exit(1)
+		return fmt.Errorf("unknown action %q", flags.action)
 	}
 }

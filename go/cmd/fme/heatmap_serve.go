@@ -15,7 +15,7 @@ import (
 // (or a null) origin, and tile servers such as OpenStreetMap reject those
 // requests, so the basemap shows "Access blocked". Serving the same page from
 // 127.0.0.1 gives the browser a real origin and the tiles load normally.
-func runHeatmapServe(flags Flags) {
+func runHeatmapServe(flags Flags) error {
 	result, err := pipeline.RunFileHeatmap(pipeline.Options{
 		Dir:            flags.dir,
 		CellDeg:        flags.cellDeg,
@@ -26,7 +26,7 @@ func runHeatmapServe(flags Flags) {
 	})
 	if err != nil {
 		logging.LogError0("runHeatmapServe", "heat map failed", "error", err)
-		return
+		return err
 	}
 
 	fmt.Printf("heat map written (map: %s)\n", result.MapID)
@@ -46,7 +46,10 @@ func runHeatmapServe(flags Flags) {
 
 	if err := http.ListenAndServe(flags.addr, noCache(http.FileServer(http.Dir(dir)))); err != nil {
 		logging.LogError0("runHeatmapServe", "http server stopped", "error", err)
+		return err
 	}
+
+	return nil
 }
 
 // noCache stops the browser from serving a stale heat map after a re-run.

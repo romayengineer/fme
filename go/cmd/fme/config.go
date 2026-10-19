@@ -6,7 +6,6 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/romayengineer/fme/go/browser/facebook"
-	"github.com/romayengineer/fme/go/core/logging"
 )
 
 type Config struct {
@@ -19,7 +18,7 @@ type Config struct {
 func NewConfig() (*Config, error) {
 	// Load .env file
 	if err := godotenv.Load(); err != nil {
-		return nil, fmt.Errorf("Error loading .env file: %v", err)
+		return nil, fmt.Errorf("load .env file: %w", err)
 	}
 
 	// Read USERNAME and PASSWORD from .env
@@ -30,8 +29,7 @@ func NewConfig() (*Config, error) {
 	profileDirectory := os.Getenv("FME_PROFILE_DIRECTORY")
 
 	if userDataDir == "" && (username == "" || password == "") {
-		logging.LogError0("NewConfig", "USERNAME or PASSWORD not set in .env file")
-		os.Exit(1)
+		return nil, fmt.Errorf("set FME_USER_DATA_DIR or FME_USERNAME/FME_PASSWORD in .env")
 	}
 
 	if userDataDir != "" && browserChannel == "" {

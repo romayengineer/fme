@@ -11,7 +11,7 @@ import (
 // runHeatmap aggregates product locations from data/__Details into a grid and
 // writes <out>.geojson plus one <out>.<map>.html per selected map. See
 // `-action=heatmap -map=<id> -cell=<deg> -out=<base> -dir=<details dir>`.
-func runHeatmap(flags Flags) {
+func runHeatmap(flags Flags) error {
 	result, err := pipeline.RunFileHeatmap(pipeline.Options{
 		Dir:            flags.dir,
 		CellDeg:        flags.cellDeg,
@@ -22,7 +22,7 @@ func runHeatmap(flags Flags) {
 	})
 	if err != nil {
 		logging.LogError0("runHeatmap", "heat map failed", "error", err)
-		return
+		return err
 	}
 
 	fmt.Printf("heat map written (map: %s)\n", result.MapID)
@@ -39,6 +39,8 @@ func runHeatmap(flags Flags) {
 	logging.LogInfo0("runHeatmap", "heat map written",
 		"geojson", result.GeoJSONPath, "html", result.HTMLPaths, "map", result.MapID,
 		"products", result.Stats.Valid, "cells", len(result.Grid.Cells))
+
+	return nil
 }
 
 // printMaps lists the available map renderers for -list-maps.

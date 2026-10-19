@@ -2,11 +2,10 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
-
-	"github.com/romayengineer/fme/go/core/logging"
 )
 
 type Flags struct {
@@ -28,7 +27,7 @@ type Flags struct {
 	retryUnavailable        bool
 }
 
-func NewFlags() Flags {
+func NewFlags() (Flags, error) {
 	action := flag.String("action", "search", "Action to perform: search, pull_description, get_details, save, process_data, dedupe_pdp, fill_empty, description_stats, heatmap, heatmap_serve, install_drivers, serve")
 	keywords := flag.String("keywords", "", "Keywords to search for (required when -action is search)")
 	logLevel := flag.String("log-level", "debug", "Log level: debug, info, warn, error")
@@ -48,7 +47,7 @@ func NewFlags() Flags {
 	flag.Parse()
 
 	if strings.ToLower(*action) == "search" && *keywords == "" {
-		logging.LogFatal("keywords flag is required when action is search")
+		return Flags{}, fmt.Errorf("-keywords is required when -action=search")
 	}
 
 	var level slog.Level
@@ -86,5 +85,5 @@ func NewFlags() Flags {
 		listMaps:                *listMaps,
 		minRepeat:               *minRepeat,
 		retryUnavailable:        *retryUnavailable,
-	}
+	}, nil
 }
