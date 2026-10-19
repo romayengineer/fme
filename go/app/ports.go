@@ -8,14 +8,13 @@ package app
 import (
 	"log/slog"
 
-	"github.com/romayengineer/fme/go/browser/driver"
 	"github.com/romayengineer/fme/go/marketplace/model"
 )
 
 // SessionFactory opens an authenticated browser context. Implementations live
 // in the browser module; tests provide a fake context.
 type SessionFactory interface {
-	Open() (driver.ContextWrapperInterface, error)
+	Open() (*Session, error)
 }
 
 // DetailStore is the application view of the data/__Details store.

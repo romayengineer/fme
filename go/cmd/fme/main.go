@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/romayengineer/fme/go/app"
 	"github.com/romayengineer/fme/go/browser/driver"
 	"github.com/romayengineer/fme/go/browser/facebook"
 	"github.com/romayengineer/fme/go/browser/pages"
@@ -26,7 +27,8 @@ type ScrapperImpl struct {
 	RetryUnavailable        bool
 	SearchKewords           string
 	StartTimeToProcess      int64
-	handlers                *capture.ContextEventHandlers
+	sessions                app.SessionFactory
+	waiter                  app.Waiter
 }
 
 func NewScrapper(flags Flags) ScrapperImpl {
@@ -52,53 +54,25 @@ func NewScrapper(flags Flags) ScrapperImpl {
 		RetryUnavailable:        flags.retryUnavailable,
 		StartTimeToProcess:      0,
 		SearchKewords:           flags.keywords,
+		sessions:                app.NewSessionFactory(blockImages),
 	}
 }
 
 func (s *ScrapperImpl) Begin() (driver.ContextWrapperInterface, error) {
-	config, err := NewConfig()
+	session, err := s.sessions.Open()
 	if err != nil {
-		return nil, fmt.Errorf("error NewConfig: %v", err)
+		return nil, fmt.Errorf("open browser session: %w", err)
 	}
 
-	playwrightWrapper, err := driver.NewPlaywrightWrapper()
-	if err != nil {
-		return nil, fmt.Errorf("error NewPlaywrightWrapper: %v", err)
-	}
-
-	var ctx driver.ContextWrapperInterface
-	if config.UserDataDir != "" {
-		ctx, err = playwrightWrapper.LaunchPersistentContext(config.UserDataDir, config.BrowserChannel, config.ProfileDirectory, false)
-		if err != nil {
-			return nil, fmt.Errorf("error LaunchPersistentContext: %v", err)
-		}
-		if err := facebook.EnsureLoggedIn(ctx); err != nil {
-			return nil, fmt.Errorf("error EnsureLoggedIn: %v", err)
-		}
-	} else {
-		browser, err := playwrightWrapper.NewBrowser(false)
-		if err != nil {
-			return nil, fmt.Errorf("error NewBrowser: %v", err)
-		}
-
-		facebookScrapper := facebook.NewFacebookScrapper(browser)
-
-		ctx, err = facebookScrapper.Login(config.UserCredentials)
-		if err != nil {
-			return nil, fmt.Errorf("error Login: %v", err)
-		}
-	}
-
-	s.handlers = capture.SetContextEventHandlers(ctx, s.BlockImages)
-
-	return ctx, nil
+	s.waiter = session.Waiter
+	return session.Context, nil
 }
 
 // waitForCapture waits until in-flight response handlers finish writing. It is
 // called before closing the context or reading the files they produce.
 func (s *ScrapperImpl) waitForCapture() {
-	if s.handlers != nil {
-		s.handlers.Wait()
+	if s.waiter != nil {
+		s.waiter.Wait()
 	}
 }
 

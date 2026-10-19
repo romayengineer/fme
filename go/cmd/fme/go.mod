@@ -3,8 +3,8 @@ module github.com/romayengineer/fme/go/cmd/fme
 go 1.25.0
 
 require (
-	github.com/joho/godotenv v1.5.1
 	github.com/romayengineer/fme/go/analytics v0.0.0
+	github.com/romayengineer/fme/go/app v0.0.0
 	github.com/romayengineer/fme/go/browser v0.0.0
 	github.com/romayengineer/fme/go/capture v0.0.0
 	github.com/romayengineer/fme/go/core v0.0.0
@@ -52,6 +52,7 @@ require (
 	github.com/googleapis/gax-go/v2 v2.12.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
+	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/labstack/echo/v5 v5.0.0-20230722203903-ec5b858dab61 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
@@ -101,6 +102,8 @@ require (
 )
 
 replace github.com/romayengineer/fme/go/analytics => ../../analytics
+
+replace github.com/romayengineer/fme/go/app => ../../app
 
 replace github.com/romayengineer/fme/go/browser => ../../browser
 

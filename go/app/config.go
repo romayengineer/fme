@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"fmt"
@@ -8,6 +8,8 @@ import (
 	"github.com/romayengineer/fme/go/browser/facebook"
 )
 
+// Config is the browser/session configuration read from .env and the process
+// environment.
 type Config struct {
 	UserCredentials  facebook.UserCredentials
 	UserDataDir      string
@@ -15,13 +17,13 @@ type Config struct {
 	ProfileDirectory string
 }
 
-func NewConfig() (*Config, error) {
-	// Load .env file
+// LoadConfig loads .env (if present) and resolves the browser session settings.
+// A persistent Chrome profile is preferred; username/password is the fallback.
+func LoadConfig() (*Config, error) {
 	if err := godotenv.Load(); err != nil {
 		return nil, fmt.Errorf("load .env file: %w", err)
 	}
 
-	// Read USERNAME and PASSWORD from .env
 	username := os.Getenv("FME_USERNAME")
 	password := os.Getenv("FME_PASSWORD")
 	userDataDir := os.Getenv("FME_USER_DATA_DIR")
@@ -42,7 +44,7 @@ func NewConfig() (*Config, error) {
 		fmt.Printf("Loaded credentials - Username: %s\n", username)
 	}
 
-	config := Config{
+	return &Config{
 		UserCredentials: facebook.UserCredentials{
 			Username: username,
 			Password: password,
@@ -50,7 +52,5 @@ func NewConfig() (*Config, error) {
 		UserDataDir:      userDataDir,
 		BrowserChannel:   browserChannel,
 		ProfileDirectory: profileDirectory,
-	}
-
-	return &config, nil
+	}, nil
 }
