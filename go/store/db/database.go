@@ -185,16 +185,34 @@ func SetProductFields(record *models.Record, product model.MarketplaceItemDetail
 	if record == nil {
 		return fmt.Errorf("record is nil")
 	}
+
+	priceAmount, err := toFloat(product.PriceAmount)
+	if err != nil {
+		return fmt.Errorf("price_amount: %w", err)
+	}
+	creationTime, err := toInt64(product.CreationTime)
+	if err != nil {
+		return fmt.Errorf("creation_time: %w", err)
+	}
+	latitude, err := toFloat(product.LocationLatitud)
+	if err != nil {
+		return fmt.Errorf("location_latitude: %w", err)
+	}
+	longitude, err := toFloat(product.LocationLongitude)
+	if err != nil {
+		return fmt.Errorf("location_longitude: %w", err)
+	}
+
 	record.Set("facebook_id_long", toString(product.IDLong))
 	record.Set("title", toStringClean(product.Title))
 	record.Set("description", toStringClean(product.Description))
 	record.Set("category", toString(product.Category))
 	record.Set("url", toString(product.URL))
-	record.Set("price_amount", toFloat(product.PriceAmount))
+	record.Set("price_amount", priceAmount)
 	record.Set("price_currency", toString(product.PriceCurrency))
-	record.Set("creation_time", toInt64(product.CreationTime))
-	record.Set("location_latitude", toFloat(product.LocationLatitud))
-	record.Set("location_longitude", toFloat(product.LocationLongitude))
+	record.Set("creation_time", creationTime)
+	record.Set("location_latitude", latitude)
+	record.Set("location_longitude", longitude)
 	record.Set("location_city_id", toString(product.LocationGeocodeCityID))
 	record.Set("location_city_name1", toString(product.LocationGeocodeCityName1))
 	record.Set("location_city_name2", toString(product.LocationGeocodeCityName2))
@@ -210,8 +228,24 @@ func SetProductFields(record *models.Record, product model.MarketplaceItemDetail
 }
 
 func (db *PocketBaseDB) UpsertProduct(product model.MarketplaceItemDetails) (sql.Result, error) {
-
 	facebookID := toString(product.ID)
+
+	priceAmount, err := toFloat(product.PriceAmount)
+	if err != nil {
+		return nil, fmt.Errorf("price_amount: %w", err)
+	}
+	creationTime, err := toInt64(product.CreationTime)
+	if err != nil {
+		return nil, fmt.Errorf("creation_time: %w", err)
+	}
+	latitude, err := toFloat(product.LocationLatitud)
+	if err != nil {
+		return nil, fmt.Errorf("location_latitude: %w", err)
+	}
+	longitude, err := toFloat(product.LocationLongitude)
+	if err != nil {
+		return nil, fmt.Errorf("location_longitude: %w", err)
+	}
 
 	sql := `INSERT INTO products (
 		facebook_id, facebook_id_long, title, description, category, url,
@@ -253,11 +287,11 @@ func (db *PocketBaseDB) UpsertProduct(product model.MarketplaceItemDetails) (sql
 		"description":         toStringClean(product.Description),
 		"category":            toString(product.Category),
 		"url":                 toString(product.URL),
-		"price_amount":        toFloat(product.PriceAmount),
+		"price_amount":        priceAmount,
 		"price_currency":      toString(product.PriceCurrency),
-		"creation_time":       toInt64(product.CreationTime),
-		"location_latitude":   toFloat(product.LocationLatitud),
-		"location_longitude":  toFloat(product.LocationLongitude),
+		"creation_time":       creationTime,
+		"location_latitude":   latitude,
+		"location_longitude":  longitude,
 		"location_city_id":    toString(product.LocationGeocodeCityID),
 		"location_city_name1": toString(product.LocationGeocodeCityName1),
 		"location_city_name2": toString(product.LocationGeocodeCityName2),
@@ -377,52 +411,52 @@ func toStringClean(v any) string {
 	return value
 }
 
-func toFloat(v any) float64 {
+func toFloat(v any) (float64, error) {
 	if v == nil {
-		return 0
+		return 0, nil
 	}
+
 	switch val := v.(type) {
 	case float64:
-		return val
+		return val, nil
 	case float32:
-		return float64(val)
+		return float64(val), nil
 	case int:
-		return float64(val)
+		return float64(val), nil
 	case int64:
-		return float64(val)
+		return float64(val), nil
 	case string:
-		num, err := strconv.ParseFloat(v.(string), 64)
+		num, err := strconv.ParseFloat(val, 64)
 		if err != nil {
-			logging.LogFatal("cannot convert to float")
+			return 0, fmt.Errorf("parse %q as float: %w", val, err)
 		}
-		return num
+		return num, nil
 	default:
-		logging.LogFatal("cannot convert to float")
+		return 0, fmt.Errorf("cannot convert %T to float64", v)
 	}
-	return 0
 }
 
-func toInt64(v any) int64 {
+func toInt64(v any) (int64, error) {
 	if v == nil {
-		return 0
+		return 0, nil
 	}
+
 	switch val := v.(type) {
 	case int64:
-		return val
+		return val, nil
 	case int:
-		return int64(val)
+		return int64(val), nil
 	case float64:
-		return int64(val)
+		return int64(val), nil
 	case string:
-		num, err := strconv.ParseInt(v.(string), 10, 64)
+		num, err := strconv.ParseInt(val, 10, 64)
 		if err != nil {
-			logging.LogFatal("cannot convert to int")
+			return 0, fmt.Errorf("parse %q as int64: %w", val, err)
 		}
-		return num
+		return num, nil
 	default:
-		logging.LogFatal("cannot convert to int")
+		return 0, fmt.Errorf("cannot convert %T to int64", v)
 	}
-	return 0
 }
 
 func toBool(v any) bool {

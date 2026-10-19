@@ -96,3 +96,84 @@ func TestProductExistsPropagatesDatabaseErrors(t *testing.T) {
 	require.Error(t, err)
 	require.False(t, exists)
 }
+
+func TestToFloat(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   any
+		want    float64
+		wantErr bool
+	}{
+		{name: "nil", value: nil, want: 0},
+		{name: "float64", value: 1.5, want: 1.5},
+		{name: "float32", value: float32(2.5), want: 2.5},
+		{name: "int", value: 3, want: 3},
+		{name: "int64", value: int64(4), want: 4},
+		{name: "string", value: "5.5", want: 5.5},
+		{name: "bad string", value: "nope", wantErr: true},
+		{name: "bool", value: true, wantErr: true},
+		{name: "list", value: []any{}, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := toFloat(tt.value)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestToInt64(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   any
+		want    int64
+		wantErr bool
+	}{
+		{name: "nil", value: nil, want: 0},
+		{name: "int64", value: int64(1), want: 1},
+		{name: "int", value: 2, want: 2},
+		{name: "float64", value: 3.9, want: 3},
+		{name: "string", value: "42", want: 42},
+		{name: "bad string", value: "4.2", wantErr: true},
+		{name: "bool", value: true, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := toInt64(tt.value)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestUpsertProductRejectsInvalidNumbers(t *testing.T) {
+	database := newTestDB(t)
+
+	tests := []struct {
+		name    string
+		product model.MarketplaceItemDetails
+	}{
+		{name: "price amount", product: model.MarketplaceItemDetails{ID: "1", PriceAmount: "nope"}},
+		{name: "creation time", product: model.MarketplaceItemDetails{ID: "2", CreationTime: "nope"}},
+		{name: "latitude", product: model.MarketplaceItemDetails{ID: "3", LocationLatitud: true}},
+		{name: "longitude", product: model.MarketplaceItemDetails{ID: "4", LocationLongitude: []any{}}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := database.UpsertProduct(tt.product)
+			require.Error(t, err)
+		})
+	}
+}
