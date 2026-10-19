@@ -13,12 +13,16 @@ import (
 
 const DataDir = "data"
 
+// detailMu serializes every detail-file read-modify-write. Each Save creates a
+// fresh FileStoreImpl, so a per-instance mutex cannot protect the same file from
+// concurrent writers (capture, FillEmpty and replayed PDP merges).
+var detailMu sync.RWMutex
+
 type FileStoreImpl[T any] struct {
 	id       string
 	fileName string
 	fileDir  string
 	data     *T
-	mu       sync.RWMutex
 }
 
 type FileStore[T any] interface {
@@ -38,13 +42,18 @@ func (pfs *FileStoreImpl[T]) SetDir(dir string) {
 }
 
 func (pfs *FileStoreImpl[T]) Get() (*T, error) {
+	detailMu.RLock()
+	defer detailMu.RUnlock()
+
+	return pfs.getLocked()
+}
+
+// getLocked reads the file without taking detailMu. Callers must already hold it.
+func (pfs *FileStoreImpl[T]) getLocked() (*T, error) {
 	var data T
 
-	pfs.mu.Lock()
 	filePath := filepath.Join(pfs.fileDir, pfs.fileName)
 	content, err := os.ReadFile(filePath)
-	pfs.mu.Unlock()
-
 	if err != nil {
 		pfs.data = &data
 		return pfs.data, nil
@@ -60,8 +69,11 @@ func (pfs *FileStoreImpl[T]) Get() (*T, error) {
 }
 
 func (pfs *FileStoreImpl[T]) Save(data T) (*T, error) {
+	detailMu.Lock()
+	defer detailMu.Unlock()
+
 	if pfs.data == nil {
-		_, err := pfs.Get()
+		_, err := pfs.getLocked()
 		if err != nil {
 			return nil, err
 		}
@@ -84,13 +96,10 @@ func (pfs *FileStoreImpl[T]) Save(data T) (*T, error) {
 		return nil, err
 	}
 
-	pfs.mu.Lock()
 	filePath := filepath.Join(pfs.fileDir, pfs.fileName)
 	if err := WriteFileAndDirs(filePath, indented, 0644); err != nil {
-		pfs.mu.Unlock()
 		return nil, err
 	}
-	pfs.mu.Unlock()
 
 	return pfs.data, nil
 }

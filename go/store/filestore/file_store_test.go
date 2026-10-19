@@ -1,6 +1,7 @@
 package filestore
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -92,4 +93,55 @@ func TestFileStoreSave(t *testing.T) {
 
 	data3, err := store2.Get()
 	assert.Equal(t, newProductID, data3.ID)
+}
+
+func TestFileStoreConcurrentSavesPreserveFields(t *testing.T) {
+	tmpDir := t.TempDir()
+	productID := uuid.New().String()
+
+	patches := []model.MarketplaceItemDetails{
+		{ID: "123", Title: "title"},
+		{ID: "123", Description: "description"},
+		{ID: "123", PriceCurrency: "USD"},
+		{ID: "123", SellerName: "seller"},
+		{ID: "123", LocationGeocodeCityName1: "city"},
+	}
+
+	start := make(chan struct{})
+	errCh := make(chan error, len(patches))
+	var wg sync.WaitGroup
+
+	for _, patch := range patches {
+		wg.Add(1)
+		go func(patch model.MarketplaceItemDetails) {
+			defer wg.Done()
+			<-start
+
+			store := NewProductFileStore(productID)
+			store.SetDir(tmpDir)
+			if _, err := store.Save(patch); err != nil {
+				errCh <- err
+			}
+		}(patch)
+	}
+
+	close(start)
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		t.Errorf("concurrent Save: %v", err)
+	}
+
+	store := NewProductFileStore(productID)
+	store.SetDir(tmpDir)
+	got, err := store.Get()
+	require.NoError(t, err)
+	require.NotNil(t, got)
+
+	assert.Equal(t, "title", got.Title)
+	assert.Equal(t, "description", got.Description)
+	assert.Equal(t, "USD", got.PriceCurrency)
+	assert.Equal(t, "seller", got.SellerName)
+	assert.Equal(t, "city", got.LocationGeocodeCityName1)
 }

@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/romayengineer/fme/go/core/jsonutil"
@@ -19,17 +18,10 @@ import (
 	"github.com/romayengineer/fme/go/marketplace/model"
 )
 
-// saveMu serializes detail-file read-modify-write so concurrent saves (e.g. the
-// synchronous FetchPDP merge and the async OnResponse merge) cannot interleave.
-var saveMu sync.Mutex
-
 func SaveProductsIfAny(products []model.MarketplaceItemDetails) bool {
 	if len(products) == 0 {
 		return false
 	}
-
-	saveMu.Lock()
-	defer saveMu.Unlock()
 
 	for _, product := range products {
 		productID, ok := product.ID.(string)
