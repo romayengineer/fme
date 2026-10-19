@@ -26,6 +26,7 @@ type ScrapperImpl struct {
 	RetryUnavailable        bool
 	SearchKewords           string
 	StartTimeToProcess      int64
+	handlers                *capture.ContextEventHandlers
 }
 
 func NewScrapper(flags Flags) ScrapperImpl {
@@ -88,9 +89,17 @@ func (s *ScrapperImpl) Begin() (driver.ContextWrapperInterface, error) {
 		}
 	}
 
-	capture.SetContextEventHandlers(ctx, s.BlockImages)
+	s.handlers = capture.SetContextEventHandlers(ctx, s.BlockImages)
 
 	return ctx, nil
+}
+
+// waitForCapture waits until in-flight response handlers finish writing. It is
+// called before closing the context or reading the files they produce.
+func (s *ScrapperImpl) waitForCapture() {
+	if s.handlers != nil {
+		s.handlers.Wait()
+	}
 }
 
 func (s *ScrapperImpl) SearchProducts() {
@@ -99,13 +108,21 @@ func (s *ScrapperImpl) SearchProducts() {
 		logging.LogError0("SearchProducts", "Error in Begin", "error", err)
 		os.Exit(1)
 	}
-	defer ctx.Close()
+	defer func() {
+		s.waitForCapture()
+		if err := ctx.Close(); err != nil {
+			logging.LogError0("SearchProducts", "could not close browser context", "error", err)
+		}
+	}()
 
 	page, _ := ctx.NewPage()
 	pgs, _ := pages.NewPages(page)
 	if err := pgs.MarketpaceSearch(s.SearchKewords, s.ScrollDownOnSearch, s.ScrollSeconds); err != nil {
 		logging.LogError0("SearchProducts", "Error in MarketpaceSearch", "error", err)
 	}
+
+	// Wait for intercepted responses before materializing them.
+	s.waitForCapture()
 
 	// Extract the listings from the search responses into data/__Details now, so the
 	// search step materializes new products (with an empty Description) on its own.
@@ -161,7 +178,12 @@ func (s *ScrapperImpl) PullDescriptions() {
 		logging.LogError0("PullDescriptions", "Error in Begin", "error", err)
 		os.Exit(1)
 	}
-	defer ctx.Close()
+	defer func() {
+		s.waitForCapture()
+		if err := ctx.Close(); err != nil {
+			logging.LogError0("PullDescriptions", "could not close browser context", "error", err)
+		}
+	}()
 
 	page, _ := ctx.NewPage()
 	pgs, _ := pages.NewPages(page)
@@ -271,7 +293,10 @@ func (s *ScrapperImpl) PullDescriptions() {
 		logging.LogWarn0("PullDescriptions", "stopped early on rate limit; progress is saved, re-run later to continue (optionally -delay-ms=N)")
 	}
 
-	filestore.ProcessData(0)
+	s.waitForCapture()
+	if _, err := filestore.ProcessData(0); err != nil {
+		logging.LogError0("PullDescriptions", "error processing responses", "error", err)
+	}
 }
 
 // fetchPDPWithBackoff fetches a PDP and, if Facebook rate-limits the request (error
@@ -381,7 +406,12 @@ func (s *ScrapperImpl) GetDetails() {
 		logging.LogError0("GetDetails", "Error in Begin", "error", err)
 		os.Exit(1)
 	}
-	defer ctx.Close()
+	defer func() {
+		s.waitForCapture()
+		if err := ctx.Close(); err != nil {
+			logging.LogError0("GetDetails", "could not close browser context", "error", err)
+		}
+	}()
 
 	page, _ := ctx.NewPage()
 	pgs, _ := pages.NewPages(page)

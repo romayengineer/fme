@@ -2,13 +2,12 @@ package capture
 
 import (
 	"net/url"
-	"regexp"
+	"path/filepath"
 	"strings"
 	"sync"
 
 	"github.com/mxschmitt/playwright-go"
 	"github.com/romayengineer/fme/go/browser/driver"
-	"github.com/romayengineer/fme/go/core/codec"
 	"github.com/romayengineer/fme/go/core/jsonutil"
 	"github.com/romayengineer/fme/go/core/logging"
 	"github.com/romayengineer/fme/go/core/orderedmap"
@@ -16,8 +15,6 @@ import (
 	"github.com/romayengineer/fme/go/store/filestore"
 )
 
-var mu sync.RWMutex
-var lastPostDataMap orderedmap.OrderedMap
 var friendlyNamesToSkipSet = map[string]struct{}{
 	"CometActorGatewayHandlerQuery":                                              {},
 	"CometClassicHomeLeftRailContainerQuery":                                     {},
@@ -67,6 +64,10 @@ var friendlyNamesToSkipSet = map[string]struct{}{
 type ContextEventHandlers struct {
 	ctx              driver.ContextWrapperInterface
 	extensionsToSkip map[string]struct{}
+
+	mu     sync.Mutex
+	closed bool
+	wg     sync.WaitGroup
 }
 
 type ShouldProcess struct {
@@ -113,9 +114,6 @@ func ShouldSkipRequest(request playwright.Request) ShouldProcess {
 	if err != nil {
 		return ShouldProcess{skip: true, postDataMap: postDataMap}
 	}
-	mu.Lock()
-	lastPostDataMap = postDataMap
-	mu.Unlock()
 	friendlyName := postDataMap.GetDefault("fb_api_req_friendly_name", "unknown")
 	if _, exists := friendlyNamesToSkipSet[friendlyName]; exists {
 		return ShouldProcess{skip: true, postDataMap: postDataMap, friendlyName: friendlyName}
@@ -123,149 +121,150 @@ func ShouldSkipRequest(request playwright.Request) ShouldProcess {
 	return ShouldProcess{skip: false, postDataMap: postDataMap, friendlyName: friendlyName}
 }
 
-func (ceh *ContextEventHandlers) OnRequest(request playwright.Request) {
-	go func(req playwright.Request) {
-		shouldSkipRequest := ShouldSkipRequest(req)
-		if shouldSkipRequest.skip {
-			return
-		}
-		newResponse, err := RunRequest(ceh.ctx, req, false)
-		if err != nil {
-			logging.LogError0("OnRequest", "Error in RunRequest", "error", err)
-			return
-		}
-		body, err := newResponse.Body()
-		if err != nil {
-			logging.LogError0("OnRequest", "Error newResponse.Body()", "error", err)
-		}
-		logging.LogDebug0("OnRequest", " body original", "size", len(body))
-		body, err = codec.DecompressBrotli(body)
-		if err != nil {
-			logging.LogError0("OnRequest", "Error DecompressBrotli()", "error", err)
-			return
-		}
-		logging.LogDebug0("OnRequest", " body decompressed", "size", len(body))
-	}(request)
-}
-
 func (ceh *ContextEventHandlers) OnResponse(response playwright.Response) {
-	go func(resp playwright.Response) {
-		request := resp.Request()
-		shouldSkipRequest := ShouldSkipRequest(request)
-		if shouldSkipRequest.skip {
-			return
-		}
-		body, err := resp.Body()
-		if err != nil {
-			logging.LogError0("OnResponse", "Error resp.Body()", "error", err)
-			return
-		}
-		jsonDatas, err := jsonutil.ExtractJsonFromBody(body)
-		if err != nil {
-			logging.LogError0("OnResponse", "Error ExtractJsonFromBody()", "error", err)
-			return
-		}
-
-		// MarketplacePDPContainerQuery responses carry the listing description
-		// (redacted_description). A PDP request is only sent when a listing is opened
-		// in the browser, so we capture this first request as a reusable template and
-		// replay it for the other listings (see FetchPDP / PullDescriptions).
-		// See docs/redacted_description.md.
-		if shouldSkipRequest.friendlyName == "MarketplacePDPContainerQuery" {
-			rateLimited := false
-			for _, jsonData := range jsonDatas {
-				if model.IsErrorRateLimit(jsonData) {
-					rateLimited = true
-					break
-				}
-			}
-
-			if rateLimited {
-				// Do not persist a rate-limit error as if it were a listing response:
-				// it has no target.id and would pollute the PDP dir.
-				logging.LogWarn0("OnResponse", "PDP response was rate limited, not saving")
-			} else {
-				// Write idempotently by targetId so the click response and the replayed
-				// response for the same product collapse into one file.
-				if targetId := GetPostDataTargetId(shouldSkipRequest.postDataMap); targetId != "" {
-					if _, err := filestore.WriteJsonResponseById(jsonDatas, shouldSkipRequest.friendlyName, targetId); err != nil {
-						logging.LogError0("OnResponse", "Error WriteJsonResponseById()", "error", err)
-					}
-				} else if _, err := filestore.WriteJsonResponse(jsonDatas, shouldSkipRequest.friendlyName); err != nil {
-					logging.LogError0("OnResponse", "Error WriteJsonResponse()", "error", err)
-				}
-
-				// Merge the description into data/__Details immediately, so the listing
-				// opened to capture the template is filled without waiting for ProcessData.
-				filestore.SaveProductsFrom(jsonDatas)
-			}
-
-			if headers, err := GetHeaders(request, false); err == nil {
-				SetPDPTemplate(PDPTemplate{
-					URL:         request.URL(),
-					Method:      request.Method(),
-					Headers:     headers,
-					PostDataMap: shouldSkipRequest.postDataMap.Clone(),
-				})
-			}
-			return
-		}
-
-		if _, err = filestore.WriteJsonResponse(jsonDatas, shouldSkipRequest.friendlyName); err != nil {
-			logging.LogError0("OnResponse", "Error WriteJsonResponse()", "error", err)
-		}
-	}(response)
+	ceh.run(func() {
+		ceh.handleResponse(response)
+	})
 }
 
-func GetExtension(path string) string {
-	re := regexp.MustCompile(`\.[a-zA-Z0-9]+$`)
-	match := re.FindString(path)
-	return match
+// run schedules work on a tracked goroutine. Once Wait is called, no new work
+// is accepted, so late browser events cannot race with context shutdown.
+func (ceh *ContextEventHandlers) run(fn func()) {
+	ceh.mu.Lock()
+	if ceh.closed {
+		ceh.mu.Unlock()
+		return
+	}
+	ceh.wg.Add(1)
+	ceh.mu.Unlock()
+
+	go func() {
+		defer ceh.wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				logging.LogError0("OnResponse", "panic while handling response", "panic", r)
+			}
+		}()
+
+		fn()
+	}()
 }
 
-func ParseURL(urlString string) {
-	parsedURL, err := url.Parse(urlString)
+// Wait stops accepting new response handlers and waits for the in-flight ones
+// to finish. Call it before closing the browser context or reading the files
+// those handlers write.
+func (ceh *ContextEventHandlers) Wait() {
+	ceh.mu.Lock()
+	ceh.closed = true
+	ceh.mu.Unlock()
+
+	ceh.wg.Wait()
+}
+
+func (ceh *ContextEventHandlers) handleResponse(resp playwright.Response) {
+	request := resp.Request()
+	shouldSkipRequest := ShouldSkipRequest(request)
+	if shouldSkipRequest.skip {
+		return
+	}
+	body, err := resp.Body()
 	if err != nil {
-		logging.LogError0("ParseURL", "Error parsing URL", "error", err)
+		logging.LogError0("OnResponse", "Error resp.Body()", "error", err)
+		return
+	}
+	jsonDatas, err := jsonutil.ExtractJsonFromBody(body)
+	if err != nil {
+		logging.LogError0("OnResponse", "Error ExtractJsonFromBody()", "error", err)
 		return
 	}
 
-	logging.LogDebug0("ParseURL", "URL details", "scheme", parsedURL.Scheme, "host", parsedURL.Host, "port", parsedURL.Port(), "path", parsedURL.Path)
-
-	if parsedURL.RawQuery != "" {
-		query := parsedURL.Query()
-		for key, values := range query {
-			logging.LogDebug0("ParseURL", "Query param", "key", key, "values", values)
+	// MarketplacePDPContainerQuery responses carry the listing description
+	// (redacted_description). A PDP request is only sent when a listing is opened
+	// in the browser, so we capture this first request as a reusable template and
+	// replay it for the other listings (see FetchPDP / PullDescriptions).
+	// See docs/redacted_description.md.
+	if shouldSkipRequest.friendlyName == "MarketplacePDPContainerQuery" {
+		rateLimited := false
+		for _, jsonData := range jsonDatas {
+			if model.IsErrorRateLimit(jsonData) {
+				rateLimited = true
+				break
+			}
 		}
+
+		if rateLimited {
+			// Do not persist a rate-limit error as if it were a listing response:
+			// it has no target.id and would pollute the PDP dir.
+			logging.LogWarn0("OnResponse", "PDP response was rate limited, not saving")
+		} else {
+			// Write idempotently by targetId so the click response and the replayed
+			// response for the same product collapse into one file.
+			if targetId := GetPostDataTargetId(shouldSkipRequest.postDataMap); targetId != "" {
+				if _, err := filestore.WriteJsonResponseById(jsonDatas, shouldSkipRequest.friendlyName, targetId); err != nil {
+					logging.LogError0("OnResponse", "Error WriteJsonResponseById()", "error", err)
+				}
+			} else if _, err := filestore.WriteJsonResponse(jsonDatas, shouldSkipRequest.friendlyName); err != nil {
+				logging.LogError0("OnResponse", "Error WriteJsonResponse()", "error", err)
+			}
+
+			// Merge the description into data/__Details immediately, so the listing
+			// opened to capture the template is filled without waiting for ProcessData.
+			filestore.SaveProductsFrom(jsonDatas)
+		}
+
+		if headers, err := GetHeaders(request, false); err == nil {
+			SetPDPTemplate(PDPTemplate{
+				URL:         request.URL(),
+				Method:      request.Method(),
+				Headers:     headers,
+				PostDataMap: shouldSkipRequest.postDataMap.Clone(),
+			})
+		}
+		return
 	}
+
+	if _, err = filestore.WriteJsonResponse(jsonDatas, shouldSkipRequest.friendlyName); err != nil {
+		logging.LogError0("OnResponse", "Error WriteJsonResponse()", "error", err)
+	}
+}
+
+func GetExtension(path string) string {
+	return filepath.Ext(path)
 }
 
 func (ceh *ContextEventHandlers) Route(r playwright.Route) {
 	request := r.Request()
 	method := request.Method()
 	if strings.ToLower(method) != "get" {
-		r.Continue()
+		if err := r.Continue(); err != nil {
+			logging.LogError0("Route", "could not continue request", "error", err)
+		}
 		return
 	}
 	urlString := request.URL()
 	parsedURL, err := url.Parse(urlString)
 	if err != nil {
 		logging.LogError0("Route", "Error parsing URL", "error", err)
-		r.Continue()
+		if err := r.Continue(); err != nil {
+			logging.LogError0("Route", "could not continue request", "error", err)
+		}
 		return
 	}
 
 	extension := GetExtension(parsedURL.Path)
 	if _, exists := ceh.extensionsToSkip[extension]; exists {
-		r.Abort()
+		if err := r.Abort(); err != nil {
+			logging.LogError0("Route", "could not abort request", "path", parsedURL.Path, "error", err)
+		}
 		return
 	}
-	r.Continue()
+	if err := r.Continue(); err != nil {
+		logging.LogError0("Route", "could not continue request", "error", err)
+	}
 }
 
-func SetContextEventHandlers(ctx driver.ContextWrapperInterface, blockImages bool) {
-
-	contextEventHandlers := ContextEventHandlers{
+func SetContextEventHandlers(ctx driver.ContextWrapperInterface, blockImages bool) *ContextEventHandlers {
+	contextEventHandlers := &ContextEventHandlers{
 		ctx: ctx,
 		extensionsToSkip: map[string]struct{}{
 			".jpg":  {},
@@ -280,10 +279,12 @@ func SetContextEventHandlers(ctx driver.ContextWrapperInterface, blockImages boo
 		// if contextEventHandlers.Route is enabled then the response
 		// from graphqh is invalid because there are missing headers
 		// but it does not matter on search
-		ctx.Route("**", contextEventHandlers.Route)
+		if err := ctx.Route("**", contextEventHandlers.Route); err != nil {
+			logging.LogError0("SetContextEventHandlers", "could not register route handler", "error", err)
+		}
 	}
 
-	// ctx.OnRequest(contextEventHandlers.OnRequest)
-
 	ctx.OnResponse(contextEventHandlers.OnResponse)
+
+	return contextEventHandlers
 }
