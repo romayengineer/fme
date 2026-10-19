@@ -96,6 +96,7 @@ description-stats:
 # Opening the .html as a file can block map tiles; prefer `just heatmap-serve`.
 heatmap *args:
     go run ./{{cmd}} -action=heatmap {{args}}
+    open data/analytics/heatmap.leaflet-esri.html 2> /dev/null
 
 # List the available heat map renderers (-map=<id>)
 heatmap-maps:
