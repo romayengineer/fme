@@ -79,11 +79,14 @@ func (f *fakeSessions) Open() (*Session, error) {
 }
 
 type fakeDetails struct {
-	processed int
-	err       error
-	pending   int
-	details   []map[string]any
-	pdpIDs    map[string]struct{}
+	processed   int
+	err         error
+	pending     int
+	details     []map[string]any
+	pdpIDs      map[string]struct{}
+	fillErr     error
+	dedupeCalls int
+	stats       DescriptionStats
 }
 
 func (d *fakeDetails) ProcessResponses(int64) (int64, error) {
@@ -107,10 +110,10 @@ func (d *fakeDetails) LoadPDPProductIDs() map[string]struct{} {
 func (d *fakeDetails) PendingDescriptions(map[string]struct{}, map[string]struct{}) (int, int, int, error) {
 	return d.pending, 0, 0, nil
 }
-func (d *fakeDetails) FillEmpty() error { return nil }
-func (d *fakeDetails) DedupePDP()       {}
+func (d *fakeDetails) FillEmpty() error { return d.fillErr }
+func (d *fakeDetails) DedupePDP()       { d.dedupeCalls++ }
 func (d *fakeDetails) DescriptionStats() (DescriptionStats, error) {
-	return DescriptionStats{}, nil
+	return d.stats, nil
 }
 
 type fakeResponseSink struct {
