@@ -1,15 +1,15 @@
 package facebook
 
 import (
-	"bufio"
 	"fmt"
-	"os"
 
 	"github.com/romayengineer/fme/go/browser/driver"
 	"github.com/romayengineer/fme/go/browser/marketplace"
 	"github.com/romayengineer/fme/go/browser/session"
 	"github.com/romayengineer/fme/go/core/logging"
 )
+
+const facebookURL = "https://www.facebook.com"
 
 type UserCredentials struct {
 	Username string
@@ -21,26 +21,26 @@ type FacebookScrapperInterface interface {
 }
 
 type FacebookScrapper struct {
-	Browser driver.BrowserWrapperInterface
+	Browser  driver.BrowserWrapperInterface
+	Sessions session.Store
 }
 
 func NewFacebookScrapper(browser driver.BrowserWrapperInterface) FacebookScrapperInterface {
-	facebookScrapper := FacebookScrapper{
-		Browser: browser,
+	return &FacebookScrapper{
+		Browser:  browser,
+		Sessions: session.FileStore{},
 	}
-	return &facebookScrapper
 }
 
-func WaitingForInput() {
-	fmt.Printf("waiting for input: ")
-	scanner := bufio.NewScanner(os.Stdin)
-	scanner.Scan()
+// NewFacebookScrapperWithStore allows tests to provide a fake session store.
+func NewFacebookScrapperWithStore(browser driver.BrowserWrapperInterface, store session.Store) *FacebookScrapper {
+	return &FacebookScrapper{Browser: browser, Sessions: store}
 }
 
 func EnsureLoggedIn(ctx driver.ContextWrapperInterface) error {
 	ctxPages, err := ctx.Pages()
 	if err != nil {
-		return fmt.Errorf("error Pages: %v", err)
+		return fmt.Errorf("list pages: %w", err)
 	}
 
 	var page driver.PageWrapperInterface
@@ -49,12 +49,12 @@ func EnsureLoggedIn(ctx driver.ContextWrapperInterface) error {
 	} else {
 		page, err = ctx.NewPage()
 		if err != nil {
-			return fmt.Errorf("error NewPage: %v", err)
+			return fmt.Errorf("create page: %w", err)
 		}
 	}
 
-	if err := page.Goto("https://www.facebook.com"); err != nil {
-		return fmt.Errorf("error Goto: %v", err)
+	if err := page.Goto(facebookURL); err != nil {
+		return fmt.Errorf("open Facebook: %w", err)
 	}
 
 	pageHelpers, err := marketplace.NewPages(page)
@@ -72,54 +72,77 @@ func EnsureLoggedIn(ctx driver.ContextWrapperInterface) error {
 }
 
 func (fs *FacebookScrapper) Login(userCredentials UserCredentials) (driver.ContextWrapperInterface, error) {
+	if ctx, ok := fs.restoreSession(); ok {
+		return ctx, nil
+	}
+	return fs.loginWithCredentials(userCredentials)
+}
 
-	savedSession, err := session.LoadSession()
+// restoreSession tries the stored cookies. It returns ok=false on a missing,
+// corrupt or expired session so the caller can fall back to a credential login.
+func (fs *FacebookScrapper) restoreSession() (driver.ContextWrapperInterface, bool) {
+	savedSession, err := fs.Sessions.Load()
 	if err != nil {
 		logging.LogWarn0("Login", "could not load saved session", "error", err)
+		_ = fs.Sessions.Delete()
+		return nil, false
 	}
-	if savedSession != nil {
-		fmt.Println("Loading existing session...")
-		ctx, err := fs.Browser.NewContext(savedSession, false)
-		if err == nil {
-			page, err := ctx.NewPage()
-			if err == nil {
-				// Verify session is still valid
-				err = page.Goto("https://www.facebook.com")
-				if err == nil {
-					pageHelpers, err := marketplace.NewPages(page)
-					if err == nil && pageHelpers.IsInHomePage() {
-						fmt.Println("Session restored successfully")
-						if err := page.Close(); err != nil {
-							logging.LogWarn0("Login", "could not close session page", "error", err)
-						}
-						return ctx, nil
-					}
-				}
-				if err := page.Close(); err != nil {
-					logging.LogWarn0("Login", "could not close session page", "error", err)
-				}
-			}
-			if err := ctx.Close(); err != nil {
-				logging.LogWarn0("Login", "could not close expired session context", "error", err)
-			}
-		}
-		fmt.Println("session expired, deleting")
-		if err := session.DeleteSession(); err != nil {
-			logging.LogWarn0("Login", "could not delete expired session", "error", err)
-		}
+	if savedSession == nil {
+		return nil, false
 	}
 
-	fmt.Println("creating new session")
-
-	// Create new context without saved session
-	ctx, err := fs.Browser.NewContext(nil, false)
+	fmt.Println("Loading existing session...")
+	ctx, err := fs.Browser.NewContext(savedSession, false)
 	if err != nil {
-		return nil, fmt.Errorf("error NewContext: %v", err)
+		logging.LogWarn0("Login", "could not restore session context", "error", err)
+		_ = fs.Sessions.Delete()
+		return nil, false
 	}
 
 	page, err := ctx.NewPage()
 	if err != nil {
-		return nil, fmt.Errorf("error NewPage: %v", err)
+		logging.LogWarn0("Login", "could not open session page", "error", err)
+		_ = ctx.Close()
+		_ = fs.Sessions.Delete()
+		return nil, false
+	}
+
+	valid := false
+	if err := page.Goto(facebookURL); err == nil {
+		if pageHelpers, err := marketplace.NewPages(page); err == nil && pageHelpers.IsInHomePage() {
+			valid = true
+		}
+	}
+	if err := page.Close(); err != nil {
+		logging.LogWarn0("Login", "could not close session page", "error", err)
+	}
+
+	if valid {
+		fmt.Println("Session restored successfully")
+		return ctx, true
+	}
+
+	if err := ctx.Close(); err != nil {
+		logging.LogWarn0("Login", "could not close expired session context", "error", err)
+	}
+	fmt.Println("session expired, deleting")
+	if err := fs.Sessions.Delete(); err != nil {
+		logging.LogWarn0("Login", "could not delete expired session", "error", err)
+	}
+	return nil, false
+}
+
+func (fs *FacebookScrapper) loginWithCredentials(userCredentials UserCredentials) (driver.ContextWrapperInterface, error) {
+	fmt.Println("creating new session")
+
+	ctx, err := fs.Browser.NewContext(nil, false)
+	if err != nil {
+		return nil, fmt.Errorf("create browser context: %w", err)
+	}
+
+	page, err := ctx.NewPage()
+	if err != nil {
+		return nil, fmt.Errorf("create page: %w", err)
 	}
 	defer func() {
 		if err := page.Close(); err != nil {
@@ -127,14 +150,11 @@ func (fs *FacebookScrapper) Login(userCredentials UserCredentials) (driver.Conte
 		}
 	}()
 
-	url := "https://www.facebook.com"
-
-	// Navigate to Facebook
-	if err = page.Goto(url); err != nil {
-		return nil, fmt.Errorf("error Goto: %v", err)
+	if err := page.Goto(facebookURL); err != nil {
+		return nil, fmt.Errorf("open Facebook: %w", err)
 	}
 
-	fmt.Printf("Successfully opened %s in Chromium\n", url)
+	fmt.Printf("Successfully opened %s in Chromium\n", facebookURL)
 
 	emailInput := page.Locator("input[name=email]")
 	if err := emailInput.Fill(userCredentials.Username); err != nil {
@@ -146,7 +166,6 @@ func (fs *FacebookScrapper) Login(userCredentials UserCredentials) (driver.Conte
 		return nil, fmt.Errorf("fill password: %w", err)
 	}
 
-	// Find and click the Log In button using getByRole
 	loginButtons, err := page.Locator("span:has-text('Log in')").All()
 	if err != nil {
 		return nil, fmt.Errorf("find login buttons: %w", err)
@@ -168,13 +187,12 @@ func (fs *FacebookScrapper) Login(userCredentials UserCredentials) (driver.Conte
 		return nil, fmt.Errorf("not in home page")
 	}
 
-	// Save the session for future use
 	storageState, err := ctx.StorageState()
 	if err != nil {
 		return nil, fmt.Errorf("get session storage state: %w", err)
 	}
 
-	if err := session.SaveSession(storageState); err != nil {
+	if err := fs.Sessions.Save(storageState); err != nil {
 		return nil, fmt.Errorf("save session: %w", err)
 	}
 

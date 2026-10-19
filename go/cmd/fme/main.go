@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/romayengineer/fme/go/app"
-	"github.com/romayengineer/fme/go/browser/facebook"
 	"github.com/romayengineer/fme/go/core/logging"
 )
 
@@ -20,7 +19,7 @@ var actionRegistry = map[string]actionFunc{
 			Keywords:      flags.keywords,
 			ScrollDown:    true,
 			ScrollSeconds: flags.scrollSeconds,
-			Pause:         facebook.WaitingForInput,
+			Pause:         waitForInput,
 		})
 	},
 	"pull_description": func(a *app.App, flags Flags) error {
@@ -32,7 +31,7 @@ var actionRegistry = map[string]actionFunc{
 		})
 	},
 	"get_details": func(a *app.App, _ Flags) error {
-		return a.GetDetails(app.GetDetailsOptions{Pause: facebook.WaitingForInput})
+		return a.GetDetails(app.GetDetailsOptions{Pause: waitForInput})
 	},
 	"install_drivers": func(a *app.App, _ Flags) error {
 		return a.InstallDrivers()

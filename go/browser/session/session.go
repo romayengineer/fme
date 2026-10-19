@@ -10,6 +10,20 @@ import (
 
 const sessionFilePath = ".session.json"
 
+// Store abstracts session persistence so auth flows can be tested with a fake.
+type Store interface {
+	Load() (*playwright.StorageState, error)
+	Save(*playwright.StorageState) error
+	Delete() error
+}
+
+// FileStore stores the session in .session.json in the working directory.
+type FileStore struct{}
+
+func (FileStore) Load() (*playwright.StorageState, error)   { return LoadSession() }
+func (FileStore) Save(state *playwright.StorageState) error { return SaveSession(state) }
+func (FileStore) Delete() error                             { return DeleteSession() }
+
 // SaveSession stores the browser cookies and storage state. The file contains
 // live Facebook session credentials, so it is readable only by the current user.
 func SaveSession(storageState *playwright.StorageState) error {
