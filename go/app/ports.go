@@ -25,6 +25,7 @@ type DetailStore interface {
 	PendingDescriptions(existing, unavailable map[string]struct{}) (pending, alreadyFetched, unavailableCount int, err error)
 	FillEmpty() error
 	DedupePDP()
+	DescriptionStats() (DescriptionStats, error)
 }
 
 // PDPState tracks listings that are gone or repeatedly fail to return a product.

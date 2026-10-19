@@ -109,6 +109,9 @@ func (d *fakeDetails) PendingDescriptions(map[string]struct{}, map[string]struct
 }
 func (d *fakeDetails) FillEmpty() error { return nil }
 func (d *fakeDetails) DedupePDP()       {}
+func (d *fakeDetails) DescriptionStats() (DescriptionStats, error) {
+	return DescriptionStats{}, nil
+}
 
 type fakePDPState struct {
 	marked []string

@@ -39,6 +39,19 @@ func (s *FileDetailStore) DedupePDP() {
 	filestore.DedupePDP()
 }
 
+func (s *FileDetailStore) DescriptionStats() (DescriptionStats, error) {
+	stats, err := filestore.ComputeDescriptionStats()
+	if err != nil {
+		return DescriptionStats{}, err
+	}
+	return DescriptionStats{
+		Total:           stats.Total,
+		WithDescription: stats.WithDescription,
+		Unavailable:     stats.Unavailable,
+		Empty:           stats.Empty,
+	}, nil
+}
+
 // SearchOptions configures a Marketplace search run.
 type SearchOptions struct {
 	Keywords      string

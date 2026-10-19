@@ -8,7 +8,6 @@ import (
 	"github.com/romayengineer/fme/go/browser/facebook"
 	"github.com/romayengineer/fme/go/core/logging"
 	"github.com/romayengineer/fme/go/store/db"
-	"github.com/romayengineer/fme/go/store/filestore"
 )
 
 type ScrapperImpl struct {
@@ -137,10 +136,9 @@ func run() error {
 	case "get_details":
 		return scrapper.GetDetails()
 	case "process_data":
-		_, err := filestore.ProcessData(0)
-		return err
+		return scrapper.application.ProcessResponses()
 	case "dedupe_pdp":
-		filestore.DedupePDP()
+		scrapper.application.DedupePDP()
 		return nil
 	case "serve":
 		_, err := db.Serve()
@@ -149,13 +147,13 @@ func run() error {
 		_, err := db.ProcessDataInDB()
 		return err
 	case "fill_empty":
-		return filestore.FillEmpty()
+		return scrapper.application.FillEmpty()
 	case "description_stats":
-		stats, err := filestore.ComputeDescriptionStats()
+		stats, err := scrapper.application.DescriptionStats()
 		if err != nil {
 			return err
 		}
-		filestore.PrintDescriptionStats(stats)
+		printDescriptionStats(stats)
 		return nil
 	case "heatmap":
 		return runHeatmap(flags)
