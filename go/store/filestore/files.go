@@ -2,6 +2,7 @@ package filestore
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"math/rand"
@@ -68,7 +69,7 @@ func ProcessData(StartTimeToProcess int64) (int64, error) {
 	var gotRateLimit bool
 
 	productExtractors := model.NewProductExtractors()
-	filesReadCounter := ForEachResponse(func(filePath string, jsonData map[string]any) bool {
+	filesReadCounter, err := ForEachResponse(func(filePath string, jsonData map[string]any) bool {
 		lastFilePath = filePath
 
 		fileTimestamp, err := GetTimestamp(filePath)
@@ -109,7 +110,7 @@ func ProcessData(StartTimeToProcess int64) (int64, error) {
 		logging.LogWarn0("ProcessData", "got rate limit")
 	}
 
-	return lastTimestamp, nil
+	return lastTimestamp, err
 }
 
 func GetTimestamp(filePath string) (int64, error) {
@@ -198,7 +199,7 @@ func WriteRandomJsonFileIndented(prefix string, friendly_name string, jsonData a
 	return WriteRandomJsonFile(prefix, friendly_name, indented)
 }
 
-func GetFilePaths(prefix string, sortit bool) []string {
+func GetFilePaths(prefix string, sortit bool) ([]string, error) {
 
 	filePaths := []string{}
 
@@ -228,8 +229,7 @@ func GetFilePaths(prefix string, sortit bool) []string {
 	})
 
 	if err != nil {
-		logging.LogError0("GetFilePaths", "Error reading data directory", "error", err)
-		os.Exit(1)
+		return nil, fmt.Errorf("walk %s: %w", DataDir, err)
 	}
 
 	if sortit {
@@ -242,29 +242,32 @@ func GetFilePaths(prefix string, sortit bool) []string {
 		rand.Shuffle(len(filePaths), func(i, j int) { filePaths[i], filePaths[j] = filePaths[j], filePaths[i] })
 	}
 
-	return filePaths
+	return filePaths, nil
 }
 
-func ForEachJsonInData(prefix string, process func(filePath string, jsonData map[string]any) bool, sortit bool) int {
+func ForEachJsonInData(prefix string, process func(filePath string, jsonData map[string]any) bool, sortit bool) (int, error) {
 	// open and read all files in data folder that start with response and end in .json
 
 	filesReadCounter := 0
+	var errs []error
 
-	filePaths := GetFilePaths(prefix, sortit)
+	filePaths, err := GetFilePaths(prefix, sortit)
+	if err != nil {
+		return 0, err
+	}
 
 	for _, filePath := range filePaths {
-
-		// fmt.Printf("%s\n", filePath)
-
 		body, err := os.ReadFile(filePath)
 		if err != nil {
-			logging.LogError0("ForEachJsonInData", "Error reading file", "path", filePath, "error", err)
+			logging.LogError0("ForEachJsonInData", "error reading file", "path", filePath, "error", err)
+			errs = append(errs, fmt.Errorf("read %s: %w", filePath, err))
 			continue
 		}
 
 		var jsonData map[string]any
 		if err := json.Unmarshal(body, &jsonData); err != nil {
-			logging.LogError0("ForEachJsonInData", "Error parsing JSON", "path", filePath, "error", err)
+			logging.LogError0("ForEachJsonInData", "error parsing JSON", "path", filePath, "error", err)
+			errs = append(errs, fmt.Errorf("parse %s: %w", filePath, err))
 			continue
 		}
 
@@ -273,19 +276,18 @@ func ForEachJsonInData(prefix string, process func(filePath string, jsonData map
 		filesReadCounter++
 
 		if !shouldContinue {
-			return filesReadCounter
+			return filesReadCounter, errors.Join(errs...)
 		}
 	}
 
-	return filesReadCounter
-
+	return filesReadCounter, errors.Join(errs...)
 }
 
-func ForEachResponse(process func(filePath string, jsonData map[string]any) bool, sortit bool) int {
+func ForEachResponse(process func(filePath string, jsonData map[string]any) bool, sortit bool) (int, error) {
 	return ForEachJsonInData("response_", process, sortit)
 }
 
-func ForEachDetail(process func(filePath string, jsonData map[string]any) bool, sortit bool) int {
+func ForEachDetail(process func(filePath string, jsonData map[string]any) bool, sortit bool) (int, error) {
 	return ForEachJsonInData("detail_", process, sortit)
 }
 
@@ -331,8 +333,8 @@ func LoadPDPProductIds() map[string]struct{} {
 // id already has a captured PDP response, or the listing is tombstoned as
 // no-longer-available. A present Description (including an empty string) counts as
 // done, matching the pull_description loop.
-func PendingDescriptionCount(existing, unavailable map[string]struct{}) (pending, alreadyFetched, unavailableCount int) {
-	ForEachDetail(func(_ string, jsonData map[string]any) bool {
+func PendingDescriptionCount(existing, unavailable map[string]struct{}) (pending, alreadyFetched, unavailableCount int, err error) {
+	_, err = ForEachDetail(func(_ string, jsonData map[string]any) bool {
 		if jsonutil.GetKey(jsonData, "Description") != nil {
 			return true
 		}
@@ -353,7 +355,7 @@ func PendingDescriptionCount(existing, unavailable map[string]struct{}) (pending
 		pending++
 		return true
 	}, false)
-	return pending, alreadyFetched, unavailableCount
+	return pending, alreadyFetched, unavailableCount, err
 }
 
 // DedupePDP removes duplicate PDP response files, keeping only the most recently
@@ -413,9 +415,8 @@ func DedupePDP() {
 	logging.LogInfo0("DedupePDP", "finished", "uniqueIds", len(byID), "deleted", deleted)
 }
 
-func FillEmpty() {
-
-	ForEachDetail(func(filePath string, jsonData map[string]any) bool {
+func FillEmpty() error {
+	_, err := ForEachDetail(func(filePath string, jsonData map[string]any) bool {
 		productUrl := jsonutil.GetKey(jsonData, "URL")
 		if productUrl != nil {
 			return true
@@ -437,8 +438,13 @@ func FillEmpty() {
 		jsonData["URL"] = productUrl
 
 		store := NewProductFileStore(productIdStr)
-		store.Save(model.ToMarketplaceItemDetails(jsonData))
+		if _, err := store.Save(model.ToMarketplaceItemDetails(jsonData)); err != nil {
+			logging.LogError0("FillEmpty", "error saving detail", "id", productIdStr, "error", err)
+			return false
+		}
 
 		return true
 	}, false)
+
+	return err
 }

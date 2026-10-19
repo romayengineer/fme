@@ -144,7 +144,11 @@ func (s *ScrapperImpl) PullDescriptions() {
 
 	// Stop before launching the browser when every remaining listing with a null
 	// description is already fetched or known to be deleted.
-	pending, alreadyFetched, unavailableSkipped := filestore.PendingDescriptionCount(existingPDPIds, unavailableIds)
+	pending, alreadyFetched, unavailableSkipped, err := filestore.PendingDescriptionCount(existingPDPIds, unavailableIds)
+	if err != nil {
+		logging.LogError0("PullDescriptions", "could not scan pending descriptions", "error", err)
+		return
+	}
 	if pending == 0 {
 		fmt.Printf("nothing to pull: %d already fetched, %d unavailable (deleted listings)\n", alreadyFetched, unavailableSkipped)
 		logging.LogInfo0("PullDescriptions", "nothing to pull", "alreadyFetched", alreadyFetched, "unavailable", unavailableSkipped)
@@ -179,7 +183,7 @@ func (s *ScrapperImpl) PullDescriptions() {
 	unavailable := 0
 	waitedSeconds := 0
 	rateLimited := false
-	filestore.ForEachDetail(func(filePath string, jsonData map[string]any) bool {
+	_, err = filestore.ForEachDetail(func(filePath string, jsonData map[string]any) bool {
 		description := jsonutil.GetKey(jsonData, "Description")
 		// A present Description (including an empty string) means the PDP was already
 		// fetched; only null/absent descriptions still need pulling.
@@ -258,6 +262,9 @@ func (s *ScrapperImpl) PullDescriptions() {
 		}
 		return true
 	}, false)
+	if err != nil {
+		logging.LogError0("PullDescriptions", "error iterating detail files", "error", err)
+	}
 
 	logging.LogInfo0("PullDescriptions", "finished", "pulled", pulled, "skipped", skipped, "unavailable", unavailable, "rateLimited", rateLimited)
 	if rateLimited {
@@ -379,7 +386,7 @@ func (s *ScrapperImpl) GetDetails() {
 	page, _ := ctx.NewPage()
 	pgs, _ := pages.NewPages(page)
 
-	filestore.ForEachDetail(func(filePath string, jsonData map[string]any) bool {
+	_, err = filestore.ForEachDetail(func(filePath string, jsonData map[string]any) bool {
 		PriceAmount := jsonutil.GetKey(jsonData, "PriceAmount")
 		if PriceAmount != nil {
 			return true
@@ -395,6 +402,9 @@ func (s *ScrapperImpl) GetDetails() {
 
 		return true
 	}, false)
+	if err != nil {
+		logging.LogError0("GetDetails", "error iterating detail files", "error", err)
+	}
 
 	facebook.WaitingForInput()
 }
@@ -431,9 +441,17 @@ func main() {
 			logging.LogFatal(err)
 		}
 	case "fill_empty":
-		filestore.FillEmpty()
+		if err := filestore.FillEmpty(); err != nil {
+			logging.LogError0("main", "fill_empty failed", "error", err)
+			os.Exit(1)
+		}
 	case "description_stats":
-		filestore.PrintDescriptionStats(filestore.ComputeDescriptionStats())
+		stats, err := filestore.ComputeDescriptionStats()
+		if err != nil {
+			logging.LogError0("main", "description_stats failed", "error", err)
+			os.Exit(1)
+		}
+		filestore.PrintDescriptionStats(stats)
 	case "heatmap":
 		runHeatmap(flags)
 	case "heatmap_serve":

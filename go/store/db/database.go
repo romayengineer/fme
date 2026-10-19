@@ -503,7 +503,7 @@ func ProcessDataInDB() (int64, error) {
 		return filesProcessedCounter, err
 	}
 
-	filestore.ForEachDetail(func(filePath string, jsonData map[string]any) bool {
+	_, err = filestore.ForEachDetail(func(filePath string, jsonData map[string]any) bool {
 		product := model.ToMarketplaceItemDetails(jsonData)
 		productIdDb, err := dbInstance.SaveProduct(product)
 
@@ -522,6 +522,10 @@ func ProcessDataInDB() (int64, error) {
 		return true
 
 	}, true)
+
+	if err != nil && firstErr == nil {
+		firstErr = err
+	}
 
 	logging.LogInfo0("ProcessDataInDB", "all files processed", "filesProcessedCounter", filesProcessedCounter)
 

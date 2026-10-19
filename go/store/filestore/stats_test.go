@@ -33,7 +33,10 @@ func TestComputeDescriptionStats(t *testing.T) {
 	writeDetail(t, detailDir, "3", nil)
 	writeDetail(t, detailDir, "4", nil)
 
-	stats := ComputeDescriptionStats()
+	stats, err := ComputeDescriptionStats()
+	if err != nil {
+		t.Fatalf("ComputeDescriptionStats: %v", err)
+	}
 
 	if stats.Total != 4 {
 		t.Errorf("Total = %d, want 4", stats.Total)
@@ -68,7 +71,10 @@ func TestComputeDescriptionStatsUnavailable(t *testing.T) {
 		t.Fatalf("MarkUnavailable: %v", err)
 	}
 
-	stats := ComputeDescriptionStats()
+	stats, err := ComputeDescriptionStats()
+	if err != nil {
+		t.Fatalf("ComputeDescriptionStats: %v", err)
+	}
 
 	if stats.Total != 2 {
 		t.Errorf("Total = %d, want 2", stats.Total)
@@ -102,7 +108,10 @@ func TestPendingDescriptionCount(t *testing.T) {
 	existing := map[string]struct{}{"3": {}}
 	unavailable := map[string]struct{}{"4": {}}
 
-	pending, alreadyFetched, unavailableCount := PendingDescriptionCount(existing, unavailable)
+	pending, alreadyFetched, unavailableCount, err := PendingDescriptionCount(existing, unavailable)
+	if err != nil {
+		t.Fatalf("PendingDescriptionCount: %v", err)
+	}
 	if pending != 1 || alreadyFetched != 1 || unavailableCount != 1 {
 		t.Errorf("got pending=%d alreadyFetched=%d unavailable=%d, want 1/1/1",
 			pending, alreadyFetched, unavailableCount)
@@ -117,7 +126,10 @@ func TestComputeDescriptionStatsEmpty(t *testing.T) {
 		t.Fatalf("mkdir: %v", err)
 	}
 
-	stats := ComputeDescriptionStats()
+	stats, err := ComputeDescriptionStats()
+	if err != nil {
+		t.Fatalf("ComputeDescriptionStats: %v", err)
+	}
 
 	if stats.Total != 0 {
 		t.Errorf("Total = %d, want 0", stats.Total)

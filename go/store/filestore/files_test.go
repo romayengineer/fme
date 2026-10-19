@@ -70,6 +70,16 @@ func TestSaveProductsFromNoProduct(t *testing.T) {
 	}
 }
 
+func TestForEachDetailReturnsDataDirectoryErrors(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	_, err := ForEachDetail(func(string, map[string]any) bool { return true }, false)
+	if err == nil {
+		t.Fatal("ForEachDetail returned nil error for a missing data directory")
+	}
+}
+
 func TestSaveProductsIfAnySkipsInvalidIDs(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Chdir(tmpDir)

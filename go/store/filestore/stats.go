@@ -41,11 +41,11 @@ func (s DescriptionStats) UnavailablePercent() float64 {
 // ComputeDescriptionStats walks data/__Details and counts records by whether their
 // Description is null, excluding listings already marked as no-longer-available
 // (see LoadUnavailableProductIds).
-func ComputeDescriptionStats() DescriptionStats {
+func ComputeDescriptionStats() (DescriptionStats, error) {
 	stats := DescriptionStats{}
 	unavailable := LoadUnavailableProductIds()
 
-	ForEachDetail(func(_ string, jsonData map[string]any) bool {
+	_, err := ForEachDetail(func(_ string, jsonData map[string]any) bool {
 		stats.Total++
 
 		id, _ := jsonutil.GetKey(jsonData, "ID").(string)
@@ -60,7 +60,7 @@ func ComputeDescriptionStats() DescriptionStats {
 	}, false)
 
 	stats.WithDescription = stats.Total - stats.Empty - stats.Unavailable
-	return stats
+	return stats, err
 }
 
 // PrintDescriptionStats writes a human-readable description report to stdout.
