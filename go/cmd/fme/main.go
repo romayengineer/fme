@@ -29,6 +29,7 @@ type ScrapperImpl struct {
 	StartTimeToProcess      int64
 	sessions                app.SessionFactory
 	waiter                  app.Waiter
+	application             *app.App
 }
 
 func NewScrapper(flags Flags) ScrapperImpl {
@@ -55,6 +56,10 @@ func NewScrapper(flags Flags) ScrapperImpl {
 		StartTimeToProcess:      0,
 		SearchKewords:           flags.keywords,
 		sessions:                app.NewSessionFactory(blockImages),
+		application: app.New(app.Deps{
+			Sessions: app.NewSessionFactory(blockImages),
+			Details:  app.NewFileDetailStore(),
+		}),
 	}
 }
 
@@ -77,48 +82,16 @@ func (s *ScrapperImpl) waitForCapture() {
 }
 
 func (s *ScrapperImpl) SearchProducts() error {
-	ctx, err := s.Begin()
-	if err != nil {
-		return fmt.Errorf("begin search: %w", err)
-	}
-	defer func() {
-		s.waitForCapture()
-		if err := ctx.Close(); err != nil {
-			logging.LogError0("SearchProducts", "could not close browser context", "error", err)
-		}
-	}()
-
-	page, err := ctx.NewPage()
-	if err != nil {
-		return fmt.Errorf("create search page: %w", err)
-	}
-	pgs, err := pages.NewPages(page)
-	if err != nil {
-		return fmt.Errorf("create page helpers: %w", err)
+	if s.application == nil {
+		return fmt.Errorf("search: application is not configured")
 	}
 
-	var runErr error
-	if err := pgs.MarketpaceSearch(s.SearchKewords, s.ScrollDownOnSearch, s.ScrollSeconds); err != nil {
-		logging.LogError0("SearchProducts", "Error in MarketpaceSearch", "error", err)
-		runErr = err
-	}
-
-	// Wait for intercepted responses before materializing them.
-	s.waitForCapture()
-
-	// Extract the listings from the search responses into data/__Details now, so the
-	// search step materializes new products (with an empty Description) on its own.
-	// Descriptions are still filled afterwards by pull_description.
-	if _, err := filestore.ProcessData(0); err != nil {
-		logging.LogError0("SearchProducts", "Error in ProcessData", "error", err)
-		if runErr == nil {
-			runErr = err
-		}
-	}
-
-	facebook.WaitingForInput()
-
-	return runErr
+	return s.application.Search(app.SearchOptions{
+		Keywords:      s.SearchKewords,
+		ScrollDown:    s.ScrollDownOnSearch,
+		ScrollSeconds: s.ScrollSeconds,
+		Pause:         facebook.WaitingForInput,
+	})
 }
 
 // PullDescriptions fetches the description (redacted_description) for every detail
