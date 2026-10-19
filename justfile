@@ -33,9 +33,9 @@ vet:
 lint:
     @for m in {{modules}}; do (cd "$m" && golangci-lint run ./...); done
 
-# Run the test suite in every module
+# Run the test suite in every module with the race detector
 test:
-    @for m in {{modules}}; do (cd "$m" && go test ./...); done
+    @for m in {{modules}}; do (cd "$m" && go test -race ./...); done
 
 # Run the test suite with coverage in every module
 cover:
