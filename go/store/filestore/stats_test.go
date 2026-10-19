@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/romayengineer/fme/go/store/pdpstate"
 )
 
 func writeDetail(t *testing.T, dir string, id string, description any) {
@@ -67,7 +69,7 @@ func TestComputeDescriptionStatsUnavailable(t *testing.T) {
 	writeDetail(t, detailDir, "1", "a real description")
 	writeDetail(t, detailDir, "2", nil)
 
-	if err := MarkUnavailable("2"); err != nil {
+	if err := pdpstate.MarkUnavailable("2"); err != nil {
 		t.Fatalf("MarkUnavailable: %v", err)
 	}
 

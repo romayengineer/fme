@@ -1,4 +1,4 @@
-package filestore
+package pdpstate
 
 import (
 	"encoding/json"
@@ -119,7 +119,7 @@ func ClearPDPFailure(productId string) {
 // dead-listing payload can be inspected later (data/.../debug/miss_<id>.json).
 func WriteDebugMiss(productId string, body []byte) error {
 	path := filepath.Join(paths.PDPDebugDir(), "miss_"+productId+".json")
-	return WriteFileAndDirs(path, body, 0644)
+	return jsonstore.WriteFileAndDirs(path, body, 0644)
 }
 
 func writePDPState(name string, v any) error {

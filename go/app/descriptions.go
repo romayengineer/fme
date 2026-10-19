@@ -9,7 +9,7 @@ import (
 	"github.com/romayengineer/fme/go/browser/pages"
 	"github.com/romayengineer/fme/go/capture"
 	"github.com/romayengineer/fme/go/core/jsonutil"
-	"github.com/romayengineer/fme/go/store/filestore"
+	"github.com/romayengineer/fme/go/store/pdpstate"
 )
 
 // PullDescriptionsOptions configures the description fill pass.
@@ -151,14 +151,14 @@ func (a *App) PullDescriptions(opts PullDescriptionsOptions) error {
 			if a.PDPState == nil {
 				return true
 			}
-			if became, count := a.PDPState.RecordPDPFailure(productId, filestore.DefaultMissThreshold); became {
+			if became, count := a.PDPState.RecordPDPFailure(productId, pdpstate.DefaultMissThreshold); became {
 				unavailableIds[productId] = struct{}{}
 				unavailable++
 				a.Logger.Warn("pull-description: no listing after repeated attempts, marking unavailable",
 					"productId", productId, "misses", count)
 			} else {
 				a.Logger.Warn("pull-description: PDP response had no listing, will retry",
-					"productId", productId, "misses", count, "threshold", filestore.DefaultMissThreshold)
+					"productId", productId, "misses", count, "threshold", pdpstate.DefaultMissThreshold)
 			}
 			return true
 		}

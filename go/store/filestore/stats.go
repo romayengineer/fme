@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/romayengineer/fme/go/core/jsonutil"
+	"github.com/romayengineer/fme/go/store/pdpstate"
 )
 
 // DescriptionStats summarizes how many detail records have a description.
@@ -43,7 +44,7 @@ func (s DescriptionStats) UnavailablePercent() float64 {
 // (see LoadUnavailableProductIds).
 func ComputeDescriptionStats() (DescriptionStats, error) {
 	stats := DescriptionStats{}
-	unavailable := LoadUnavailableProductIds()
+	unavailable := pdpstate.LoadUnavailableProductIds()
 
 	_, err := ForEachDetail(func(_ string, jsonData map[string]any) bool {
 		stats.Total++

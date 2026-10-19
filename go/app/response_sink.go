@@ -1,6 +1,9 @@
 package app
 
-import "github.com/romayengineer/fme/go/store/filestore"
+import (
+	"github.com/romayengineer/fme/go/store/filestore"
+	"github.com/romayengineer/fme/go/store/pdpstate"
+)
 
 // FileResponseSink adapts the JSON store to the capture Sink/ResponseSink ports.
 type FileResponseSink struct{}
@@ -23,5 +26,5 @@ func (s *FileResponseSink) MergeProducts(jsonDatas []any) int {
 }
 
 func (s *FileResponseSink) WriteDebugMiss(productID string, body []byte) error {
-	return filestore.WriteDebugMiss(productID, body)
+	return pdpstate.WriteDebugMiss(productID, body)
 }

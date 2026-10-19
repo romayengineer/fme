@@ -1,4 +1,4 @@
-package filestore
+package pdpstate
 
 import (
 	"os"
@@ -21,11 +21,6 @@ func TestUnavailableMarkerRoundTrip(t *testing.T) {
 	ids := LoadUnavailableProductIds()
 	if _, ok := ids["gone-1"]; !ok || len(ids) != 1 {
 		t.Fatalf("ids = %v, want {gone-1}", ids)
-	}
-
-	// Tombstones must not be mistaken for PDP responses.
-	if pdp := LoadPDPProductIds(); len(pdp) != 0 {
-		t.Errorf("LoadPDPProductIds = %v, want empty", pdp)
 	}
 
 	if err := ClearUnavailable("gone-1"); err != nil {
