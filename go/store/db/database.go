@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -301,8 +302,14 @@ func (db *PocketBaseDB) SaveProduct(product model.MarketplaceItemDetails) (strin
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
-	db.UpsertProduct(product)
-	productID, _ := db.GetProductID(product)
+	if _, err := db.UpsertProduct(product); err != nil {
+		return "", fmt.Errorf("save product %v: %w", product.ID, err)
+	}
+
+	productID, err := db.GetProductID(product)
+	if err != nil {
+		return "", fmt.Errorf("get saved product id for %v: %w", product.ID, err)
+	}
 
 	logging.LogDebug0("SaveProduct", "product saved", "productID", productID, "facebook_id", product.ID)
 	return productID, nil
@@ -310,15 +317,17 @@ func (db *PocketBaseDB) SaveProduct(product model.MarketplaceItemDetails) (strin
 
 func (db *PocketBaseDB) SaveProducts(products []model.MarketplaceItemDetails) (int, error) {
 	count := 0
+	var errs []error
 	for _, product := range products {
 		if _, err := db.SaveProduct(product); err != nil {
 			logging.LogError0("SaveProducts", "error saving product", "facebook_id", product.ID, "error", err)
+			errs = append(errs, err)
 			continue
 		}
 		count++
 	}
 	logging.LogInfo0("SaveProducts", "batch save completed", "count", count, "total", len(products))
-	return count, nil
+	return count, errors.Join(errs...)
 }
 
 func (db *PocketBaseDB) ProductExists(facebookID string) (bool, error) {
@@ -332,7 +341,10 @@ func (db *PocketBaseDB) ProductExists(facebookID string) (bool, error) {
 
 	record, err := db.app.Dao().FindFirstRecordByData(collection.Id, "facebook_id", toString(facebookID))
 	if err != nil {
-		return false, nil
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("find product by facebook_id %s: %w", facebookID, err)
 	}
 
 	return record != nil, nil
@@ -446,6 +458,7 @@ func Serve() (*PocketBaseDB, error) {
 
 func ProcessDataInDB() (int64, error) {
 	var filesProcessedCounter int64
+	var firstErr error
 
 	dbInstance, err := GetPocketBaseDB()
 	if err != nil {
@@ -457,17 +470,14 @@ func ProcessDataInDB() (int64, error) {
 	}
 
 	filestore.ForEachDetail(func(filePath string, jsonData map[string]any) bool {
-
-		// description := GetKey(jsonData, "Description")
-		// if description == nil {
-		// 	return true
-		// }
-
 		product := model.ToMarketplaceItemDetails(jsonData)
 		productIdDb, err := dbInstance.SaveProduct(product)
 
 		if err != nil {
-			logging.LogError0("ProcessDataInDB", "Error in dbInstance.SaveProduct", err)
+			logging.LogError0("ProcessDataInDB", "error saving product", "file", filePath, "facebook_id", product.ID, "error", err)
+			if firstErr == nil {
+				firstErr = err
+			}
 			return false
 		}
 
@@ -481,5 +491,5 @@ func ProcessDataInDB() (int64, error) {
 
 	logging.LogInfo0("ProcessDataInDB", "all files processed", "filesProcessedCounter", filesProcessedCounter)
 
-	return filesProcessedCounter, nil
+	return filesProcessedCounter, firstErr
 }
