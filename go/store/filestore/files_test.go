@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/romayengineer/fme/go/marketplace/model"
 )
 
 func TestSaveProductsFromMergesDescription(t *testing.T) {
@@ -65,5 +67,31 @@ func TestSaveProductsFromNoProduct(t *testing.T) {
 
 	if saved := SaveProductsFrom([]any{map[string]any{"unrelated": true}}); saved != 0 {
 		t.Errorf("SaveProductsFrom = %d, want 0", saved)
+	}
+}
+
+func TestSaveProductsIfAnySkipsInvalidIDs(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	products := []model.MarketplaceItemDetails{
+		{ID: nil, Title: "missing id"},
+		{ID: 123, Title: "numeric id"},
+		{ID: "valid-id", Title: "valid"},
+	}
+
+	if saved := SaveProductsIfAny(products); !saved {
+		t.Fatal("SaveProductsIfAny = false, want true")
+	}
+
+	entries, err := os.ReadDir(filepath.Join(DataDir, "__Details"))
+	if err != nil {
+		t.Fatalf("read details dir: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("got %d detail files, want 1", len(entries))
+	}
+	if got := entries[0].Name(); got != "detail_valid-id.json" {
+		t.Errorf("detail file = %q, want detail_valid-id.json", got)
 	}
 }

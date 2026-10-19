@@ -23,16 +23,27 @@ import (
 var saveMu sync.Mutex
 
 func SaveProductsIfAny(products []model.MarketplaceItemDetails) bool {
-	if len(products) > 0 {
-		saveMu.Lock()
-		defer saveMu.Unlock()
-		for _, product := range products {
-			store := NewProductFileStore(product.ID.(string))
-			store.Save(product)
-		}
-		return true
+	if len(products) == 0 {
+		return false
 	}
-	return false
+
+	saveMu.Lock()
+	defer saveMu.Unlock()
+
+	for _, product := range products {
+		productID, ok := product.ID.(string)
+		if !ok || productID == "" {
+			logging.LogWarn0("SaveProductsIfAny", "skipping product without a valid id", "id", product.ID)
+			continue
+		}
+
+		store := NewProductFileStore(productID)
+		if _, err := store.Save(product); err != nil {
+			logging.LogError0("SaveProductsIfAny", "error saving product", "id", productID, "error", err)
+		}
+	}
+
+	return true
 }
 
 // SaveProductsFrom extracts products from in-memory response JSON and merges them

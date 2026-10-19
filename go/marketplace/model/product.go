@@ -141,13 +141,12 @@ func IsErrorRateLimit(data any) bool {
 	}
 
 	for _, err := range errorsList {
-		message := jsonutil.GetKey(err, "message")
-
-		if message == nil {
+		message, ok := jsonutil.GetKey(err, "message").(string)
+		if !ok {
 			continue
 		}
 
-		if strings.ToLower(message.(string)) == "rate limit exceeded" {
+		if strings.EqualFold(message, "rate limit exceeded") {
 			return true
 		}
 
@@ -183,8 +182,8 @@ func ProductGone(data any) (reason string, ok bool) {
 // (product detail page) response. See ProductDetailsGet for the requirements to
 // obtain a PDP response containing `redacted_description`.
 func ProductDetailsValid(data any) bool {
-	id := jsonutil.GetKey(data, "data.viewer.marketplace_product_details_page.target.id")
-	return id != nil
+	id, ok := jsonutil.GetKey(data, "data.viewer.marketplace_product_details_page.target.id").(string)
+	return ok && id != ""
 }
 
 func GetTaxonomiPathJoined(detail any) any {
@@ -194,11 +193,11 @@ func GetTaxonomiPathJoined(detail any) any {
 	taxonomyPathList, ok := taxonomyPath.([]any)
 	if ok {
 		for _, taxonomi := range taxonomyPathList {
-			taxonomiName := jsonutil.GetKey(taxonomi, "seo_info.seo_url")
-			if taxonomiName == nil {
+			taxonomiName, ok := jsonutil.GetKey(taxonomi, "seo_info.seo_url").(string)
+			if !ok || taxonomiName == "" {
 				continue
 			}
-			taxonomiNames = append(taxonomiNames, taxonomiName.(string))
+			taxonomiNames = append(taxonomiNames, taxonomiName)
 		}
 	}
 	var taxonomiPathJoined any
@@ -258,18 +257,18 @@ func ProductDetailsGet(data any) ([]MarketplaceItemDetails, error) {
 		return nil, fmt.Errorf("detail not found")
 	}
 
-	productId := jsonutil.GetKey(detail, "target.id")
-	if productId == nil {
-		return nil, fmt.Errorf("detail does not have id")
+	productID, ok := jsonutil.GetKey(detail, "target.id").(string)
+	if !ok || productID == "" {
+		return nil, fmt.Errorf("detail does not have a valid id")
 	}
 
 	var products []MarketplaceItemDetails
 
 	productIdLong := jsonutil.GetKey(detail, "target.product_item.id")
 
-	productUrl := jsonutil.GetKey(detail, "target.story.url")
-	if productUrl == nil {
-		productUrl = ProductIDTolink(productId.(string))
+	productURL := jsonutil.GetKey(detail, "target.story.url")
+	if productURL == nil {
+		productURL = ProductIDTolink(productID)
 	}
 	productTitle := jsonutil.GetKey(detail, "target.marketplace_listing_title")
 	productDescription := jsonutil.GetKey(detail, "target.redacted_description.text")
@@ -287,10 +286,10 @@ func ProductDetailsGet(data any) ([]MarketplaceItemDetails, error) {
 	detailPhotos := GetPhotosURI(jsonutil.GetKey(detail, "target.listing_photos"))
 
 	marketplaceItemDetails := MarketplaceItemDetails{
-		ID:                       productId,
+		ID:                       productID,
 		TaxonomiPathJoined:       taxonomiPathJoined,
 		IDLong:                   productIdLong,
-		URL:                      productUrl,
+		URL:                      productURL,
 		Title:                    productTitle,
 		Description:              productDescription,
 		PriceAmount:              productPriceAmount,
@@ -330,8 +329,7 @@ func ProductsFromSearchValid(data any) bool {
 			continue
 		}
 
-		productId := jsonutil.GetKey(listing, "id")
-		if productId != nil {
+		if productID, ok := jsonutil.GetKey(listing, "id").(string); ok && productID != "" {
 			return true
 		}
 	}
@@ -388,12 +386,12 @@ func ProductsFromSearchGet(data any) ([]MarketplaceItemDetails, error) {
 			continue
 		}
 
-		productId := jsonutil.GetKey(listing, "id")
-		if productId == nil {
+		productID, ok := jsonutil.GetKey(listing, "id").(string)
+		if !ok || productID == "" {
 			continue
 		}
 
-		productUrl := ProductIDTolink(productId.(string))
+		productURL := ProductIDTolink(productID)
 
 		title := jsonutil.GetKey(listing, "marketplace_listing_title")
 		price := jsonutil.GetKey(listing, "listing_price.amount")
@@ -414,8 +412,8 @@ func ProductsFromSearchGet(data any) ([]MarketplaceItemDetails, error) {
 		productDeliveryTypes := jsonutil.GetKey(listing, "delivery_types")
 
 		marketplaceItemDetails := MarketplaceItemDetails{
-			ID:                       productId,
-			URL:                      productUrl,
+			ID:                       productID,
+			URL:                      productURL,
 			Title:                    title,
 			CreationTime:             time,
 			PriceAmount:              price,
@@ -442,8 +440,8 @@ func ProductsFromSearchGet(data any) ([]MarketplaceItemDetails, error) {
 }
 
 func ProducFromDataValid(data any) bool {
-	id := jsonutil.GetKey(data, "data.node.entity_id")
-	return id != nil
+	id, ok := jsonutil.GetKey(data, "data.node.entity_id").(string)
+	return ok && id != ""
 }
 
 func ProducFromDataGet(data any) ([]MarketplaceItemDetails, error) {
@@ -452,9 +450,9 @@ func ProducFromDataGet(data any) ([]MarketplaceItemDetails, error) {
 		return nil, fmt.Errorf("data node not found")
 	}
 
-	productId := jsonutil.GetKey(node, "entity_id")
-	if productId == nil {
-		return nil, fmt.Errorf("product does not have id")
+	productID, ok := jsonutil.GetKey(node, "entity_id").(string)
+	if !ok || productID == "" {
+		return nil, fmt.Errorf("product does not have a valid id")
 	}
 
 	var products []MarketplaceItemDetails
@@ -470,7 +468,7 @@ func ProducFromDataGet(data any) ([]MarketplaceItemDetails, error) {
 		productCategory = nil
 	}
 
-	productUrl := ProductIDTolink(productId.(string))
+	productURL := ProductIDTolink(productID)
 
 	productPriceCurrency := jsonutil.GetKey(node, "data.price.currency")
 
@@ -479,8 +477,8 @@ func ProducFromDataGet(data any) ([]MarketplaceItemDetails, error) {
 	productCreation := jsonutil.GetKey(node, "listing.creation_time")
 
 	marketplaceItemDetails := MarketplaceItemDetails{
-		ID:                       productId,
-		URL:                      productUrl,
+		ID:                       productID,
+		URL:                      productURL,
 		IDLong:                   productIdLong,
 		Category:                 productCategory,
 		Title:                    productTitle,
