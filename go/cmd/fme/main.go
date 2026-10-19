@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
 	"os"
 	"time"
 
@@ -10,7 +9,6 @@ import (
 	"github.com/romayengineer/fme/go/browser/driver"
 	"github.com/romayengineer/fme/go/browser/facebook"
 	"github.com/romayengineer/fme/go/browser/pages"
-	"github.com/romayengineer/fme/go/capture"
 	"github.com/romayengineer/fme/go/core/jsonutil"
 	"github.com/romayengineer/fme/go/core/logging"
 	"github.com/romayengineer/fme/go/store/db"
@@ -59,6 +57,7 @@ func NewScrapper(flags Flags) ScrapperImpl {
 		application: app.New(app.Deps{
 			Sessions: app.NewSessionFactory(blockImages),
 			Details:  app.NewFileDetailStore(),
+			PDPState: app.NewFilePDPState(),
 		}),
 	}
 }
@@ -99,257 +98,16 @@ func (s *ScrapperImpl) SearchProducts() error {
 // MarketplacePDPContainerQuery request template; the rest is replayed via ctx.Fetch.
 // See docs/redacted_description.md.
 func (s *ScrapperImpl) PullDescriptions() error {
-	// Materialize any as-yet-unprocessed search responses into data/__Details first
-	// (no browser needed), so listings found by a recent `search` run are included
-	// in this fill pass.
-	var runErr error
-	if _, err := filestore.ProcessData(0); err != nil {
-		logging.LogError0("PullDescriptions", "Error in ProcessData", "error", err)
-		runErr = err
+	if s.application == nil {
+		return fmt.Errorf("pull-description: application is not configured")
 	}
 
-	existingPDPIds := filestore.LoadPDPProductIds()
-	logging.LogInfo0("PullDescriptions", "loaded existing PDP responses", "count", len(existingPDPIds))
-
-	// Listings known to be gone are skipped unless the caller explicitly asks to
-	// retry them (e.g. after a re-post).
-	unavailableIds := map[string]struct{}{}
-	if s.RetryUnavailable {
-		logging.LogInfo0("PullDescriptions", "retrying previously unavailable listings", "flag", "-retry-unavailable")
-	} else {
-		unavailableIds = filestore.LoadUnavailableProductIds()
-	}
-	logging.LogInfo0("PullDescriptions", "loaded unavailable listings", "count", len(unavailableIds))
-
-	// Stop before launching the browser when every remaining listing with a null
-	// description is already fetched or known to be deleted.
-	pending, alreadyFetched, unavailableSkipped, err := filestore.PendingDescriptionCount(existingPDPIds, unavailableIds)
-	if err != nil {
-		return fmt.Errorf("scan pending descriptions: %w", err)
-	}
-	if pending == 0 {
-		fmt.Printf("nothing to pull: %d already fetched, %d unavailable (deleted listings)\n", alreadyFetched, unavailableSkipped)
-		logging.LogInfo0("PullDescriptions", "nothing to pull", "alreadyFetched", alreadyFetched, "unavailable", unavailableSkipped)
-		return runErr
-	}
-	logging.LogInfo0("PullDescriptions", "pending descriptions", "pending", pending)
-
-	ctx, err := s.Begin()
-	if err != nil {
-		return fmt.Errorf("begin pull descriptions: %w", err)
-	}
-	defer func() {
-		s.waitForCapture()
-		if err := ctx.Close(); err != nil {
-			logging.LogError0("PullDescriptions", "could not close browser context", "error", err)
-		}
-	}()
-
-	page, err := ctx.NewPage()
-	if err != nil {
-		return fmt.Errorf("create pull-description page: %w", err)
-	}
-	pgs, err := pages.NewPages(page)
-	if err != nil {
-		return fmt.Errorf("create page helpers: %w", err)
-	}
-
-	if err := pgs.MarketplaceHome(); err != nil {
-		return fmt.Errorf("open marketplace home: %w", err)
-	}
-
-	fmt.Println("Opening a listing to capture the PDP request template...")
-	template := s.capturePDPTemplate(pgs, page)
-	if template == nil {
-		return fmt.Errorf("did not capture the PDP request template: Facebook is likely throttling this session (error 1675004); wait and retry later")
-	}
-
-	pulled := 0
-	skipped := 0
-	unavailable := 0
-	waitedSeconds := 0
-	rateLimited := false
-	_, err = filestore.ForEachDetail(func(filePath string, jsonData map[string]any) bool {
-		description := jsonutil.GetKey(jsonData, "Description")
-		// A present Description (including an empty string) means the PDP was already
-		// fetched; only null/absent descriptions still need pulling.
-		if description != nil {
-			return true
-		}
-
-		productId := jsonutil.GetKey(jsonData, "ID")
-		if productId == nil {
-			return true
-		}
-		productIdStr, ok := productId.(string)
-		if !ok {
-			return true
-		}
-
-		// Already captured in a previous run: don't fetch (or write) again.
-		if _, exists := existingPDPIds[productIdStr]; exists {
-			skipped++
-			return true
-		}
-
-		// Known to no longer exist: skip instead of failing every run.
-		if _, exists := unavailableIds[productIdStr]; exists {
-			unavailable++
-			return true
-		}
-
-		outcome, waited, err := s.fetchPDPWithBackoff(page, template, productIdStr)
-		waitedSeconds += waited
-		if err != nil {
-			logging.LogError0("PullDescriptions", "Error fetching PDP", "productId", productIdStr, "error", err)
-			return true
-		}
-		if outcome.RateLimited {
-			logging.LogWarn0("PullDescriptions", "rate limit did not clear, stopping", "pulled", pulled, "waitedSec", waitedSeconds)
-			rateLimited = true
-			return false
-		}
-		if outcome.Gone {
-			if err := filestore.MarkUnavailable(productIdStr); err != nil {
-				logging.LogError0("PullDescriptions", "could not mark unavailable", "productId", productIdStr, "error", err)
-			}
-			unavailableIds[productIdStr] = struct{}{}
-			unavailable++
-			logging.LogWarn0("PullDescriptions", "listing no longer exists, skipping future runs", "productId", productIdStr)
-			return true
-		}
-		if outcome.NoProduct {
-			if became, count := filestore.RecordPDPFailure(productIdStr, filestore.DefaultMissThreshold); became {
-				unavailableIds[productIdStr] = struct{}{}
-				unavailable++
-				logging.LogWarn0("PullDescriptions", "no listing after repeated attempts, marking unavailable",
-					"productId", productIdStr, "misses", count)
-			} else {
-				logging.LogWarn0("PullDescriptions", "PDP response had no listing, will retry",
-					"productId", productIdStr, "misses", count, "threshold", filestore.DefaultMissThreshold)
-			}
-			return true
-		}
-
-		// Success: clear any failure state and remember the response.
-		filestore.ClearPDPFailure(productIdStr)
-		if s.RetryUnavailable {
-			if err := filestore.ClearUnavailable(productIdStr); err != nil {
-				logging.LogError0("PullDescriptions", "could not clear unavailable marker", "productId", productIdStr, "error", err)
-			}
-		}
-		existingPDPIds[productIdStr] = struct{}{}
-		pulled++
-		if pulled%50 == 0 {
-			logging.LogInfo0("PullDescriptions", "progress", "pulled", pulled)
-		}
-		if s.DelayMs > 0 {
-			time.Sleep(time.Duration(s.DelayMs) * time.Millisecond)
-		}
-		return true
-	}, false)
-	if err != nil {
-		logging.LogError0("PullDescriptions", "error iterating detail files", "error", err)
-		runErr = err
-	}
-
-	logging.LogInfo0("PullDescriptions", "finished", "pulled", pulled, "skipped", skipped, "unavailable", unavailable, "rateLimited", rateLimited)
-	if rateLimited {
-		logging.LogWarn0("PullDescriptions", "stopped early on rate limit; progress is saved, re-run later to continue (optionally -delay-ms=N)")
-	}
-
-	s.waitForCapture()
-	if _, err := filestore.ProcessData(0); err != nil {
-		logging.LogError0("PullDescriptions", "error processing responses", "error", err)
-		if runErr == nil {
-			runErr = err
-		}
-	}
-
-	return runErr
-}
-
-// fetchPDPWithBackoff fetches a PDP and, if Facebook rate-limits the request (error
-// code 1675004), waits and retries the same product until the limit clears or the
-// per-run waiting budget (MaxRateLimitWaitSeconds) is exhausted. This makes a
-// transient throttle pause the run instead of aborting it, while still saving all
-// progress if the limit does not clear. Returns (outcome, waitedSeconds, err).
-func (s *ScrapperImpl) fetchPDPWithBackoff(page driver.PageWrapperInterface, template *capture.PDPTemplate, productId string) (capture.PDPOutcome, int, error) {
-	waited := 0
-	wait := s.RateLimitWaitSeconds
-	for {
-		outcome, err := capture.FetchPDP(page, template, productId)
-		if err != nil {
-			return outcome, waited, err
-		}
-		if !outcome.RateLimited {
-			return outcome, waited, nil
-		}
-
-		if s.RateLimitWaitSeconds <= 0 {
-			return outcome, waited, nil
-		}
-		if waited+wait > s.MaxRateLimitWaitSeconds {
-			return outcome, waited, nil
-		}
-
-		// Exponential backoff (capped) so frequent retries do not keep the throttle
-		// alive. A little jitter avoids retrying in lockstep.
-		jitter := rand.Intn(wait/4 + 1)
-		sleepFor := wait + jitter
-		logging.LogWarn0("PullDescriptions", "rate limited, waiting before retry", "productId", productId, "waitSec", sleepFor, "waitedSec", waited)
-		time.Sleep(time.Duration(sleepFor) * time.Second)
-		waited += sleepFor
-
-		wait *= 2
-		if wait > 600 {
-			wait = 600
-		}
-	}
-}
-
-// capturePDPTemplate clicks listings until the browser issues a
-// MarketplacePDPContainerQuery, which provides the reusable request template. If one
-// listing does not produce the request (e.g. Facebook throttles it and serves the
-// error page), it returns to the Marketplace home and tries the next listing.
-func (s *ScrapperImpl) capturePDPTemplate(pgs pages.PagesInterface, page driver.PageWrapperInterface) *capture.PDPTemplate {
-	const maxAttempts = 6
-	for attempt := 0; attempt < maxAttempts; attempt++ {
-		if attempt > 0 {
-			if err := pgs.MarketplaceHome(); err != nil {
-				logging.LogWarn0("PullDescriptions", "could not return to marketplace", "attempt", attempt, "error", err)
-			}
-			time.Sleep(2 * time.Second)
-		}
-
-		if !pgs.OpenProduct(attempt) {
-			logging.LogWarn0("PullDescriptions", "could not open a listing for the template", "attempt", attempt)
-			continue
-		}
-
-		if template := waitForPDPTemplate(15); template != nil {
-			return template
-		}
-
-		if throttled, err := page.Evaluate(`document.body.innerText.includes("This page isn't available right now")`); err == nil {
-			if isThrottled, ok := throttled.(bool); ok && isThrottled {
-				logging.LogWarn0("PullDescriptions", "Facebook is serving its error page for this session (likely throttled, code 1675004)")
-			}
-		}
-		logging.LogWarn0("PullDescriptions", "no PDP request captured, trying another listing", "attempt", attempt)
-	}
-	return nil
-}
-
-func waitForPDPTemplate(timeoutSeconds int) *capture.PDPTemplate {
-	deadline := time.Now().Add(time.Duration(timeoutSeconds) * time.Second)
-	for time.Now().Before(deadline) {
-		if template, ok := capture.GetPDPTemplate(); ok {
-			return template
-		}
-		time.Sleep(250 * time.Millisecond)
-	}
-	return nil
+	return s.application.PullDescriptions(app.PullDescriptionsOptions{
+		RetryUnavailable:        s.RetryUnavailable,
+		DelayMs:                 s.DelayMs,
+		RateLimitWaitSeconds:    s.RateLimitWaitSeconds,
+		MaxRateLimitWaitSeconds: s.MaxRateLimitWaitSeconds,
+	})
 }
 
 // InstallDrivers downloads the Playwright driver and Chromium ahead of time, so the

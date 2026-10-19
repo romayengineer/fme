@@ -23,6 +23,10 @@ func (s *FileDetailStore) ForEachDetail(process func(filePath string, jsonData m
 	return filestore.ForEachDetail(process, sortit)
 }
 
+func (s *FileDetailStore) LoadPDPProductIDs() map[string]struct{} {
+	return filestore.LoadPDPProductIds()
+}
+
 func (s *FileDetailStore) PendingDescriptions(existing, unavailable map[string]struct{}) (pending, alreadyFetched, unavailableCount int, err error) {
 	return filestore.PendingDescriptionCount(existing, unavailable)
 }

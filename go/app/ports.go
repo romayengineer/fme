@@ -21,6 +21,7 @@ type SessionFactory interface {
 type DetailStore interface {
 	ProcessResponses(startTime int64) (int64, error)
 	ForEachDetail(process func(filePath string, jsonData map[string]any) bool, sortit bool) (int, error)
+	LoadPDPProductIDs() map[string]struct{}
 	PendingDescriptions(existing, unavailable map[string]struct{}) (pending, alreadyFetched, unavailableCount int, err error)
 	FillEmpty() error
 	DedupePDP()

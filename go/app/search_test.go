@@ -9,20 +9,38 @@ import (
 	"github.com/romayengineer/fme/go/browser/driver"
 )
 
+type fakeLocator struct{}
+
+func (l *fakeLocator) Fill(string) error                                            { return nil }
+func (l *fakeLocator) Click() error                                                 { return nil }
+func (l *fakeLocator) Locator(string) driver.LocatorWrapperInterface                { return l }
+func (l *fakeLocator) WaitFor(float64) error                                        { return nil }
+func (l *fakeLocator) GetByRole(playwright.AriaRole) driver.LocatorWrapperInterface { return l }
+func (l *fakeLocator) Nth(int) driver.LocatorWrapperInterface                       { return l }
+func (l *fakeLocator) All() ([]driver.LocatorWrapperInterface, error) {
+	return []driver.LocatorWrapperInterface{l}, nil
+}
+
 type fakePage struct {
 	gotos []string
+	body  string
 }
 
 func (p *fakePage) Goto(url string) error {
 	p.gotos = append(p.gotos, url)
 	return nil
 }
-func (p *fakePage) Locator(string) driver.LocatorWrapperInterface { return nil }
+func (p *fakePage) Locator(string) driver.LocatorWrapperInterface { return &fakeLocator{} }
 func (p *fakePage) Close() error                                  { return nil }
 func (p *fakePage) GetByRole(playwright.AriaRole) driver.LocatorWrapperInterface {
-	return nil
+	return &fakeLocator{}
 }
-func (p *fakePage) Evaluate(string, ...any) (any, error) { return nil, nil }
+func (p *fakePage) Evaluate(string, ...any) (any, error) {
+	if p.body != "" {
+		return p.body, nil
+	}
+	return nil, nil
+}
 
 type fakeContext struct {
 	page   driver.PageWrapperInterface
@@ -50,29 +68,62 @@ type fakeWaiter struct {
 func (w *fakeWaiter) Wait() { w.waits++ }
 
 type fakeSessions struct {
-	session *Session
-	err     error
+	session   *Session
+	err       error
+	openCalls int
 }
 
-func (f *fakeSessions) Open() (*Session, error) { return f.session, f.err }
+func (f *fakeSessions) Open() (*Session, error) {
+	f.openCalls++
+	return f.session, f.err
+}
 
 type fakeDetails struct {
 	processed int
 	err       error
+	pending   int
+	details   []map[string]any
+	pdpIDs    map[string]struct{}
 }
 
 func (d *fakeDetails) ProcessResponses(int64) (int64, error) {
 	d.processed++
 	return 0, d.err
 }
-func (d *fakeDetails) ForEachDetail(func(string, map[string]any) bool, bool) (int, error) {
-	return 0, nil
+func (d *fakeDetails) ForEachDetail(process func(string, map[string]any) bool, _ bool) (int, error) {
+	for i, detail := range d.details {
+		if !process("detail_"+string(rune('0'+i))+".json", detail) {
+			break
+		}
+	}
+	return len(d.details), nil
+}
+func (d *fakeDetails) LoadPDPProductIDs() map[string]struct{} {
+	if d.pdpIDs == nil {
+		return map[string]struct{}{}
+	}
+	return d.pdpIDs
 }
 func (d *fakeDetails) PendingDescriptions(map[string]struct{}, map[string]struct{}) (int, int, int, error) {
-	return 0, 0, 0, nil
+	return d.pending, 0, 0, nil
 }
 func (d *fakeDetails) FillEmpty() error { return nil }
 func (d *fakeDetails) DedupePDP()       {}
+
+type fakePDPState struct {
+	marked []string
+}
+
+func (s *fakePDPState) MarkUnavailable(productID string) error {
+	s.marked = append(s.marked, productID)
+	return nil
+}
+func (s *fakePDPState) ClearUnavailable(string) error { return nil }
+func (s *fakePDPState) LoadUnavailableProductIDs() map[string]struct{} {
+	return map[string]struct{}{}
+}
+func (s *fakePDPState) RecordPDPFailure(string, int) (bool, int) { return false, 1 }
+func (s *fakePDPState) ClearPDPFailure(string)                   {}
 
 func TestSearchRunsSearchAndProcessesResponses(t *testing.T) {
 	page := &fakePage{}
