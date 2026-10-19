@@ -44,7 +44,7 @@ func RunRequestWithData(ctx driver.ContextWrapperInterface, pwRequest playwright
 
 	headers, err := GetHeaders(pwRequest, headersSimple)
 	if err != nil {
-		return nil, fmt.Errorf("Error in GetHeaders: %w\n", err)
+		return nil, fmt.Errorf("get request headers: %w", err)
 	}
 
 	logging.LogDebug0("RunRequest", "request", "url", url, "method", method)
@@ -61,7 +61,7 @@ func RunRequestWithData(ctx driver.ContextWrapperInterface, pwRequest playwright
 		},
 	)
 	if err != nil {
-		return nil, fmt.Errorf("Error executing apiRequest: %w\n", err)
+		return nil, fmt.Errorf("execute api request: %w", err)
 	}
 
 	responseHeaders := response.Headers()
@@ -76,7 +76,7 @@ func RunRequestWithData(ctx driver.ContextWrapperInterface, pwRequest playwright
 func RunRequest(ctx driver.ContextWrapperInterface, pwRequest playwright.Request, headersSimple bool) (playwright.APIResponse, error) {
 	data, err := pwRequest.PostData()
 	if err != nil {
-		return nil, fmt.Errorf("Error in PostData: %w\n", err)
+		return nil, fmt.Errorf("read request post data: %w", err)
 	}
 	return RunRequestWithData(ctx, pwRequest, data, headersSimple)
 }

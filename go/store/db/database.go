@@ -116,8 +116,7 @@ func (db *PocketBaseDB) runMigrations() error {
 
 func (db *PocketBaseDB) ensureProductsCollection() error {
 	// Try to find existing collection
-	collection, err := db.app.Dao().FindCollectionByNameOrId("products")
-	if err == nil {
+	if _, err := db.app.Dao().FindCollectionByNameOrId("products"); err == nil {
 		logging.LogDebug0("ensureProductsCollection", "products collection already exists")
 		return nil
 	}
@@ -125,7 +124,7 @@ func (db *PocketBaseDB) ensureProductsCollection() error {
 	logging.LogInfo0("ensureProductsCollection", "creating products collection")
 
 	// Create new collection
-	collection = &models.Collection{
+	collection := &models.Collection{
 		Name: "products",
 		Type: "base",
 	}

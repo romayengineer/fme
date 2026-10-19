@@ -71,7 +71,8 @@ func TestFileStoreSave(t *testing.T) {
 		Description: "Test Description",
 	}
 
-	store.Save(testData)
+	_, err = store.Save(testData)
+	assert.NoError(t, err)
 
 	store2 := NewProductFileStore(productID)
 	store2.SetDir(tmpDir)
@@ -89,9 +90,11 @@ func TestFileStoreSave(t *testing.T) {
 	newProductID := uuid.New().String()
 	testData.ID = newProductID
 
-	store2.Save(testData)
+	_, err = store2.Save(testData)
+	assert.NoError(t, err)
 
 	data3, err := store2.Get()
+	assert.NoError(t, err)
 	assert.Equal(t, newProductID, data3.ID)
 }
 

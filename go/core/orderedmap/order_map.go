@@ -22,24 +22,24 @@ func (om *OrderedMap) Set(key string, value string) {
 func (om *OrderedMap) SetJsonString(key string, KeyIn string, value any) error {
 	val, exists := om.Get(key)
 	if !exists {
-		return fmt.Errorf("key does not exists in OrderedMap %s\n", key)
+		return fmt.Errorf("key %q does not exist in ordered map", key)
 	}
 
 	var jsonData any
 	if err := json.Unmarshal([]byte(val), &jsonData); err != nil {
-		return fmt.Errorf("key is not json string %s\n", key)
+		return fmt.Errorf("key %q is not a JSON string", key)
 	}
 
 	dataMap, ok := jsonData.(map[string]any)
 	if !ok {
-		return fmt.Errorf("key is not map[string]any %s\n", key)
+		return fmt.Errorf("key %q is not a JSON object", key)
 	}
 
 	dataMap[KeyIn] = value
 
 	jsonString, err := json.Marshal(dataMap)
 	if err != nil {
-		return fmt.Errorf("cannot convert to json string %v\n", err)
+		return fmt.Errorf("marshal ordered-map value: %w", err)
 	}
 
 	om.Set(key, string(jsonString))

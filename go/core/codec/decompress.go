@@ -59,7 +59,9 @@ func DecompressGzip(data []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error creating gzip reader: %w", err)
 	}
-	defer reader.Close()
+	defer func() {
+		_ = reader.Close()
+	}()
 
 	result, err := io.ReadAll(reader)
 	if err != nil {

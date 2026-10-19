@@ -86,16 +86,22 @@ func (fs *FacebookScrapper) Login(userCredentials UserCredentials) (driver.Conte
 				// Verify session is still valid
 				err = page.Goto("https://www.facebook.com")
 				if err == nil {
-					pages, _ := pages.NewPages(page)
-					if pages.IsInHomePage() {
+					pageHelpers, err := pages.NewPages(page)
+					if err == nil && pageHelpers.IsInHomePage() {
 						fmt.Println("Session restored successfully")
-						page.Close()
+						if err := page.Close(); err != nil {
+							logging.LogWarn0("Login", "could not close session page", "error", err)
+						}
 						return ctx, nil
 					}
 				}
-				page.Close()
+				if err := page.Close(); err != nil {
+					logging.LogWarn0("Login", "could not close session page", "error", err)
+				}
 			}
-			ctx.Close()
+			if err := ctx.Close(); err != nil {
+				logging.LogWarn0("Login", "could not close expired session context", "error", err)
+			}
 		}
 		fmt.Println("session expired, deleting")
 		if err := session.DeleteSession(); err != nil {
@@ -115,7 +121,11 @@ func (fs *FacebookScrapper) Login(userCredentials UserCredentials) (driver.Conte
 	if err != nil {
 		return nil, fmt.Errorf("error NewPage: %v", err)
 	}
-	defer page.Close()
+	defer func() {
+		if err := page.Close(); err != nil {
+			logging.LogWarn0("Login", "could not close login page", "error", err)
+		}
+	}()
 
 	url := "https://www.facebook.com"
 

@@ -116,7 +116,7 @@ func (lw *LocatorWrapper) All() ([]LocatorWrapperInterface, error) {
 func (lw *LocatorWrapper) Fill(value string) error {
 	err := lw.locator.Fill(value)
 	if err != nil {
-		return fmt.Errorf("error on fill: %v", err)
+		return fmt.Errorf("error on fill: %w", err)
 	}
 	return nil
 }
@@ -124,7 +124,7 @@ func (lw *LocatorWrapper) Fill(value string) error {
 func (lw *LocatorWrapper) Click() error {
 	err := lw.locator.Click()
 	if err != nil {
-		return fmt.Errorf("error on click: %v", err)
+		return fmt.Errorf("error on click: %w", err)
 	}
 	return nil
 }
@@ -149,7 +149,7 @@ func (pw *PageWrapper) GetByRole(role playwright.AriaRole) LocatorWrapperInterfa
 func (pw *PageWrapper) Goto(url string) error {
 	_, err := pw.Page.Goto(url)
 	if err != nil {
-		return fmt.Errorf("Could not goto %s: %v", url, err)
+		return fmt.Errorf("could not goto %s: %v", url, err)
 	}
 	return nil
 }
@@ -177,7 +177,7 @@ func (ww *BrowserWrapper) NewContext(storageState *playwright.StorageState, isMo
 	if storageState != nil {
 		opts.StorageState = storageState.ToOptionalStorageState()
 	}
-	if isMobile == true && ww.Playwright != nil {
+	if isMobile && ww.Playwright != nil {
 		device := ww.Playwright.Devices["Pixel 5"]
 		opts.Viewport = device.Viewport
 		opts.UserAgent = playwright.String(device.UserAgent)
@@ -187,7 +187,7 @@ func (ww *BrowserWrapper) NewContext(storageState *playwright.StorageState, isMo
 	}
 	context, err := ww.Browser.NewContext(opts)
 	if err != nil {
-		return nil, fmt.Errorf("Could not create context: %v", err)
+		return nil, fmt.Errorf("could not create context: %w", err)
 	}
 	return NewContextWrapper(context), nil
 }
@@ -216,7 +216,7 @@ func (ww *ContextWrapper) Route(url any, handler RouteHandler) error {
 func (cw *ContextWrapper) NewPage() (PageWrapperInterface, error) {
 	page, err := cw.Context.NewPage()
 	if err != nil {
-		return nil, fmt.Errorf("Could not create page: %v", err)
+		return nil, fmt.Errorf("could not create page: %w", err)
 	}
 	return NewPageWrapper(page), nil
 }
@@ -241,7 +241,7 @@ func (cw *ContextWrapper) Fetch(urlOrRequest any, options ...playwright.APIReque
 func (cw *ContextWrapper) StorageState() (*playwright.StorageState, error) {
 	storageState, err := cw.Context.StorageState()
 	if err != nil {
-		return nil, fmt.Errorf("Could not get storage state: %v", err)
+		return nil, fmt.Errorf("could not get storage state: %w", err)
 	}
 	return storageState, nil
 }
@@ -250,7 +250,7 @@ func NewPlaywrightWrapper() (PlaywrightWrapperInterface, error) {
 	playwrightWrapper := PlaywrightWrapper{}
 	err := playwrightWrapper.Run()
 	if err != nil {
-		return &playwrightWrapper, fmt.Errorf("Could not create PlaywrightWrapper: %v", err)
+		return &playwrightWrapper, fmt.Errorf("could not create PlaywrightWrapper: %w", err)
 	}
 	return &playwrightWrapper, nil
 }
@@ -269,14 +269,14 @@ func (pw *PlaywrightWrapper) Run() error {
 		Browsers: []string{"chromium"},
 	})
 	if err != nil {
-		return fmt.Errorf("Could not install browser drivers: %v", err)
+		return fmt.Errorf("could not install browser drivers: %w", err)
 	}
 
 	playwright, err := playwright.Run()
 	pw.Playwright = playwright
 
 	if err != nil {
-		return fmt.Errorf("Could not start playwright: %v", err)
+		return fmt.Errorf("could not start playwright: %w", err)
 	}
 
 	return err
@@ -298,7 +298,7 @@ func (pw *PlaywrightWrapper) LaunchPersistentContext(userDataDir string, channel
 	}
 	context, err := pw.Playwright.Chromium.LaunchPersistentContext(userDataDir, opts)
 	if err != nil {
-		return nil, fmt.Errorf("Could not launch persistent context: %v", err)
+		return nil, fmt.Errorf("could not launch persistent context: %w", err)
 	}
 	return NewContextWrapper(context), nil
 }
@@ -308,11 +308,11 @@ func (pw *PlaywrightWrapper) NewBrowser(headless bool) (BrowserWrapperInterface,
 		Headless: &headless,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("Could not launch chromium: %v", err)
+		return nil, fmt.Errorf("could not launch chromium: %w", err)
 	}
 	browserWrapper, err := NewBrowserWrapper(browser, pw.Playwright)
 	if err != nil {
-		return browserWrapper, fmt.Errorf("Could not create BrowserWrapper: %v", err)
+		return browserWrapper, fmt.Errorf("could not create BrowserWrapper: %w", err)
 	}
 	return browserWrapper, nil
 }

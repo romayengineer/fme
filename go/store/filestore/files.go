@@ -75,7 +75,7 @@ func ProcessData(StartTimeToProcess int64) (int64, error) {
 
 		filesProcessedCounter += 1
 
-		if hasAny := SaveProductsIfAny(productExtractors.ExtractAll(jsonData)); hasAny == true {
+		if hasAny := SaveProductsIfAny(productExtractors.ExtractAll(jsonData)); hasAny {
 			return true
 		}
 
@@ -115,7 +115,7 @@ func GetTimestamp(filePath string) (int64, error) {
 	lastTimestamp, err := strconv.ParseInt(lastTimestampStr, 10, 64)
 	if err != nil {
 		logging.LogError0("GetTimestamp", "cound not get timestamp", "filePath", filePath)
-		return 0, fmt.Errorf("cound not get timestamp %s\n", filePath)
+		return 0, fmt.Errorf("could not parse timestamp from %s: %w", filePath, err)
 	}
 	return lastTimestamp, nil
 }
