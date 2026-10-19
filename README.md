@@ -121,7 +121,8 @@ Run `just doctor` first; it prints the exact fix for anything it finds.
 ## Layout
 
 ```
-go/cmd/fme            CLI entrypoint (flags, actions, orchestration)
+go/cmd/fme            CLI entrypoint: flags, action registry, output
+go/app/               Use cases and ports (search, descriptions, import, serve)
 go/browser/           Playwright driver wrapper, Facebook login, page helpers
 go/capture/           Response interception and PDP request replay
 go/marketplace/model  Product model and URL helpers
@@ -131,3 +132,28 @@ go/core/              Logging, JSON, codec, string utilities
 ml/                   Python price-prediction pipeline
 scripts/              setup.sh, doctor.sh
 ```
+
+## Go architecture
+
+Dependencies point in one direction:
+
+```
+cmd/fme -> app -> {browser, capture, store, marketplace, analytics} -> core
+```
+
+- `cmd/fme` parses flags, builds the dependency graph, and dispatches through
+  `actionRegistry`. It contains no scraping or storage logic.
+- `go/app` owns the use cases and the ports they consume (`SessionFactory`,
+  `DetailStore`, `PDPState`, `ResponseSink`, `ProductRepository`). Tests for this
+  package use fakes and never start Playwright.
+- `capture` persists through its `Sink` interface; it does not import `store`.
+- `store` provides file and PocketBase implementations; it does not decide when
+  a use case runs.
+
+To add a CLI action:
+
+1. Add an options struct and a use-case method in `go/app`.
+2. Add the action to `actionRegistry` in `go/cmd/fme/main.go`.
+3. Add its flags in `go/cmd/fme/flags.go` and document it in the command table.
+4. Add a fake-based test in `go/app`; only add an integration test if the action
+   needs a real browser or database.
