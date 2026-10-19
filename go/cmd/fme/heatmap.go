@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/romayengineer/fme/go/analytics/heatmap"
 	"github.com/romayengineer/fme/go/analytics/pipeline"
@@ -34,7 +35,7 @@ func runHeatmap(flags Flags) error {
 		result.Stats.Valid, result.Stats.Scanned, result.Stats.Skipped, result.Stats.Dropped)
 	fmt.Printf("  cells:     %d (peak %d, cell %.4f deg)\n",
 		len(result.Grid.Cells), result.Grid.MaxCount, result.Grid.Options.CellDeg)
-	fmt.Printf("\ntip: switch basemap with -map=<id> (%s), or open the .html directly\n", joinMapIDs())
+	fmt.Printf("\ntip: switch basemap with -map=<id> (%s), or open the .html directly\n", strings.Join(heatmap.MapIDs(), ", "))
 
 	logging.LogInfo0("runHeatmap", "heat map written",
 		"geojson", result.GeoJSONPath, "html", result.HTMLPaths, "map", result.MapID,
@@ -59,16 +60,4 @@ func printMaps() {
 	}
 	fmt.Println("also: -map=all")
 	fmt.Printf("\n(* = default)\n")
-}
-
-func joinMapIDs() string {
-	ids := heatmap.MapIDs()
-	out := ""
-	for i, id := range ids {
-		if i > 0 {
-			out += ", "
-		}
-		out += id
-	}
-	return out
 }

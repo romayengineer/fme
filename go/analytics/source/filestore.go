@@ -4,6 +4,7 @@ package source
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -33,6 +34,7 @@ type FileSource struct {
 	stats  analytics.Stats
 	points []analytics.LocatedPoint
 	loaded bool
+	err    error
 }
 
 // detailRecord decodes only the fields we need. The coordinate fields are
@@ -93,9 +95,25 @@ func (s *FileSource) locate() []analytics.LocatedPoint {
 		workers = runtime.GOMAXPROCS(0)
 	}
 
-	s.points, s.stats = readAll(detailFiles(dir), workers)
+	paths, err := detailFiles(dir)
+	if err != nil {
+		s.err = err
+		s.stats = analytics.Stats{}
+		s.loaded = true
+		return nil
+	}
+
+	s.points, s.stats = readAll(paths, workers)
 	s.loaded = true
 	return s.points
+}
+
+// Err reports a directory read error encountered while loading points.
+func (s *FileSource) Err() error {
+	s.locate()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.err
 }
 
 // readAll reads the given files concurrently and returns the valid points (with
@@ -138,10 +156,10 @@ func readAll(paths []string, workers int) ([]analytics.LocatedPoint, analytics.S
 }
 
 // detailFiles lists data/__Details entries in deterministic (sorted) order.
-func detailFiles(dir string) []string {
+func detailFiles(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("read detail directory %s: %w", dir, err)
 	}
 	paths := make([]string, 0, len(entries))
 	for _, e := range entries {
@@ -155,7 +173,7 @@ func detailFiles(dir string) []string {
 		paths = append(paths, filepath.Join(dir, name))
 	}
 	sort.Strings(paths)
-	return paths
+	return paths, nil
 }
 
 // readPoints parses one detail file and returns its point, if the coordinates

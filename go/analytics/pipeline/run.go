@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/romayengineer/fme/go/analytics"
 	"github.com/romayengineer/fme/go/analytics/heatmap"
@@ -51,9 +52,23 @@ func RunFileHeatmap(opts Options) (Result, error) {
 		opts.Title = "Marketplace product heat map"
 	}
 
-	mapIDs, err := resolveMaps(opts.Map)
+	result, mapIDs, geojson, err := buildFileHeatmap(opts)
 	if err != nil {
 		return Result{}, err
+	}
+	if err := writeFileHeatmap(opts, &result, mapIDs, geojson); err != nil {
+		return Result{}, err
+	}
+
+	return result, nil
+}
+
+// buildFileHeatmap loads points, aggregates the grid and renders GeoJSON. It
+// performs no writes.
+func buildFileHeatmap(opts Options) (Result, []string, []byte, error) {
+	mapIDs, err := resolveMaps(opts.Map)
+	if err != nil {
+		return Result{}, nil, nil, err
 	}
 
 	src := &source.FileSource{Dir: opts.Dir, Workers: opts.Workers}
@@ -63,44 +78,53 @@ func RunFileHeatmap(opts Options) (Result, error) {
 	}
 	grid := heatmap.Aggregate(points, heatmap.Options{CellDeg: opts.CellDeg})
 
+	if err := src.Err(); err != nil {
+		return Result{}, nil, nil, fmt.Errorf("read detail files: %w", err)
+	}
+
 	geojson, err := grid.GeoJSON()
 	if err != nil {
-		return Result{}, fmt.Errorf("build geojson: %w", err)
-	}
-
-	if dir := filepath.Dir(opts.OutBase); dir != "" {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return Result{}, fmt.Errorf("create output dir: %w", err)
-		}
-	}
-
-	geojsonPath := opts.OutBase + ".geojson"
-	if err := os.WriteFile(geojsonPath, geojson, 0o644); err != nil {
-		return Result{}, fmt.Errorf("write geojson: %w", err)
+		return Result{}, nil, nil, fmt.Errorf("build geojson: %w", err)
 	}
 
 	result := Result{
-		MapID:       opts.Map,
-		GeoJSONPath: geojsonPath,
-		Grid:        grid,
-		Stats:       sourceStats(points),
+		MapID: opts.Map,
+		Grid:  grid,
+		Stats: sourceStats(points),
 	}
 	if result.MapID == "" {
 		result.MapID = heatmap.DefaultMapID
 	}
 
+	return result, mapIDs, geojson, nil
+}
+
+// writeFileHeatmap writes the GeoJSON and one HTML page per selected map.
+func writeFileHeatmap(opts Options, result *Result, mapIDs []string, geojson []byte) error {
+	if dir := filepath.Dir(opts.OutBase); dir != "" {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return fmt.Errorf("create output dir: %w", err)
+		}
+	}
+
+	geojsonPath := opts.OutBase + ".geojson"
+	if err := os.WriteFile(geojsonPath, geojson, 0o644); err != nil {
+		return fmt.Errorf("write geojson: %w", err)
+	}
+	result.GeoJSONPath = geojsonPath
+
 	for _, mapID := range mapIDs {
-		html, err := grid.RenderHTML(mapID, heatmap.MapOptions{
+		html, err := result.Grid.RenderHTML(mapID, heatmap.MapOptions{
 			Title: opts.Title,
 			Token: tokenFor(mapID, opts.MapToken),
 		})
 		if err != nil {
-			return Result{}, fmt.Errorf("build html for %s: %w", mapID, err)
+			return fmt.Errorf("build html for %s: %w", mapID, err)
 		}
 
 		path := fmt.Sprintf("%s.%s.html", opts.OutBase, mapID)
 		if err := os.WriteFile(path, html, 0o644); err != nil {
-			return Result{}, fmt.Errorf("write html for %s: %w", mapID, err)
+			return fmt.Errorf("write html for %s: %w", mapID, err)
 		}
 		result.HTMLPaths = append(result.HTMLPaths, path)
 	}
@@ -109,7 +133,7 @@ func RunFileHeatmap(opts Options) (Result, error) {
 		result.HTMLPath = result.HTMLPaths[0]
 	}
 
-	return result, nil
+	return nil
 }
 
 // sourceStats reports coverage from a source that implements StatsSource.
@@ -129,7 +153,7 @@ func resolveMaps(selector string) ([]string, error) {
 		return heatmap.MapIDs(), nil
 	}
 	if _, ok := heatmap.MapByID(selector); !ok {
-		return nil, fmt.Errorf("unknown map %q (valid: %s, %s)", selector, MapAll, joinIDs())
+		return nil, fmt.Errorf("unknown map %q (valid: %s, %s)", selector, MapAll, strings.Join(heatmap.MapIDs(), ", "))
 	}
 	return []string{selector}, nil
 }
@@ -144,16 +168,4 @@ func tokenFor(mapID, explicit string) string {
 		return ""
 	}
 	return os.Getenv(info.TokenEnv)
-}
-
-func joinIDs() string {
-	ids := heatmap.MapIDs()
-	out := ""
-	for i, id := range ids {
-		if i > 0 {
-			out += ", "
-		}
-		out += id
-	}
-	return out
 }

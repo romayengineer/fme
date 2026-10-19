@@ -55,9 +55,12 @@ func TestFileSourceEmptyDir(t *testing.T) {
 	}
 }
 
-func TestFileSourceAwsFromMissingDir(t *testing.T) {
+func TestFileSourceMissingDirReturnsError(t *testing.T) {
 	src := &FileSource{Dir: filepath.Join(t.TempDir(), "does-not-exist")}
 	if n := src.ForEach(func(analytics.GeoPoint) bool { return true }); n != 0 {
 		t.Errorf("points = %d, want 0", n)
+	}
+	if err := src.Err(); err == nil {
+		t.Error("Err returned nil for a missing directory")
 	}
 }
