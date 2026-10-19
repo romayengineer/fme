@@ -3,13 +3,9 @@ package main
 import (
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/romayengineer/fme/go/app"
-	"github.com/romayengineer/fme/go/browser/driver"
 	"github.com/romayengineer/fme/go/browser/facebook"
-	"github.com/romayengineer/fme/go/browser/pages"
-	"github.com/romayengineer/fme/go/core/jsonutil"
 	"github.com/romayengineer/fme/go/core/logging"
 	"github.com/romayengineer/fme/go/store/db"
 	"github.com/romayengineer/fme/go/store/filestore"
@@ -25,8 +21,6 @@ type ScrapperImpl struct {
 	RetryUnavailable        bool
 	SearchKewords           string
 	StartTimeToProcess      int64
-	sessions                app.SessionFactory
-	waiter                  app.Waiter
 	application             *app.App
 }
 
@@ -53,30 +47,11 @@ func NewScrapper(flags Flags) ScrapperImpl {
 		RetryUnavailable:        flags.retryUnavailable,
 		StartTimeToProcess:      0,
 		SearchKewords:           flags.keywords,
-		sessions:                app.NewSessionFactory(blockImages),
 		application: app.New(app.Deps{
 			Sessions: app.NewSessionFactory(blockImages),
 			Details:  app.NewFileDetailStore(),
 			PDPState: app.NewFilePDPState(),
 		}),
-	}
-}
-
-func (s *ScrapperImpl) Begin() (driver.ContextWrapperInterface, error) {
-	session, err := s.sessions.Open()
-	if err != nil {
-		return nil, fmt.Errorf("open browser session: %w", err)
-	}
-
-	s.waiter = session.Waiter
-	return session.Context, nil
-}
-
-// waitForCapture waits until in-flight response handlers finish writing. It is
-// called before closing the context or reading the files they produce.
-func (s *ScrapperImpl) waitForCapture() {
-	if s.waiter != nil {
-		s.waiter.Wait()
 	}
 }
 
@@ -116,73 +91,19 @@ func (s *ScrapperImpl) PullDescriptions() error {
 // already-downloaded artifacts are kept. It needs neither a .env nor a Facebook
 // session, so it can run right after cloning.
 func (s *ScrapperImpl) InstallDrivers() error {
-	fmt.Println("Installing Playwright driver and Chromium (this may take a while)...")
-
-	wrapper, err := driver.NewPlaywrightWrapper()
-	if err != nil {
-		return fmt.Errorf("install playwright drivers: %w", err)
+	if s.application == nil {
+		return fmt.Errorf("install-drivers: application is not configured")
 	}
-
-	if err := wrapper.Stop(); err != nil {
-		logging.LogError0("InstallDrivers", "could not stop playwright", "error", err)
-	}
-
-	logging.LogInfo0("InstallDrivers", "playwright driver and chromium are installed")
-	return nil
+	return s.application.InstallDrivers()
 }
 
 func (s *ScrapperImpl) GetDetails() error {
-	ctx, err := s.Begin()
-	if err != nil {
-		return fmt.Errorf("begin get details: %w", err)
+	if s.application == nil {
+		return fmt.Errorf("get-details: application is not configured")
 	}
-	defer func() {
-		s.waitForCapture()
-		if err := ctx.Close(); err != nil {
-			logging.LogError0("GetDetails", "could not close browser context", "error", err)
-		}
-	}()
-
-	page, err := ctx.NewPage()
-	if err != nil {
-		return fmt.Errorf("create get-details page: %w", err)
-	}
-	pgs, err := pages.NewPages(page)
-	if err != nil {
-		return fmt.Errorf("create page helpers: %w", err)
-	}
-
-	_, err = filestore.ForEachDetail(func(filePath string, jsonData map[string]any) bool {
-		PriceAmount := jsonutil.GetKey(jsonData, "PriceAmount")
-		if PriceAmount != nil {
-			return true
-		}
-
-		productId := jsonutil.GetKey(jsonData, "ID")
-		if productId == nil {
-			return true
-		}
-
-		productID, ok := productId.(string)
-		if !ok {
-			logging.LogWarn0("GetDetails", "skipping invalid product id", "id", productId)
-			return true
-		}
-		if err := pgs.GoToProduct(productID); err != nil {
-			logging.LogError0("GetDetails", "could not open product", "productId", productID, "error", err)
-			return true
-		}
-		time.Sleep(3 * time.Second)
-
-		return true
-	}, false)
-	if err != nil {
-		logging.LogError0("GetDetails", "error iterating detail files", "error", err)
-	}
-
-	facebook.WaitingForInput()
-
-	return err
+	return s.application.GetDetails(app.GetDetailsOptions{
+		Pause: facebook.WaitingForInput,
+	})
 }
 
 func main() {
