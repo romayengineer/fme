@@ -46,6 +46,13 @@ func TestSaveProductAndProductExists(t *testing.T) {
 	require.False(t, exists)
 }
 
+func TestGetProductIDNotFound(t *testing.T) {
+	database := newTestDB(t)
+
+	_, err := database.GetProductID(model.MarketplaceItemDetails{ID: "missing"})
+	require.ErrorIs(t, err, ErrNotFound)
+}
+
 func TestSaveProductUpdatesExistingRow(t *testing.T) {
 	database := newTestDB(t)
 
