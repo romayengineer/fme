@@ -5,7 +5,6 @@ go 1.25.0
 require (
 	github.com/romayengineer/fme/go/analytics v0.0.0
 	github.com/romayengineer/fme/go/app v0.0.0
-	github.com/romayengineer/fme/go/browser v0.0.0
 	github.com/romayengineer/fme/go/core v0.0.0
 )
 
@@ -62,6 +61,7 @@ require (
 	github.com/pocketbase/dbx v1.10.1 // indirect
 	github.com/pocketbase/pocketbase v0.21.3 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
+	github.com/romayengineer/fme/go/browser v0.0.0 // indirect
 	github.com/romayengineer/fme/go/capture v0.0.0 // indirect
 	github.com/romayengineer/fme/go/marketplace v0.0.0 // indirect
 	github.com/romayengineer/fme/go/store v0.0.0 // indirect

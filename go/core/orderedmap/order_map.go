@@ -3,8 +3,6 @@ package orderedmap
 import (
 	"encoding/json"
 	"fmt"
-
-	"github.com/romayengineer/fme/go/core/logging"
 )
 
 type OrderedMap struct {
@@ -13,6 +11,9 @@ type OrderedMap struct {
 }
 
 func (om *OrderedMap) Set(key string, value string) {
+	if om.data == nil {
+		om.data = map[string]string{}
+	}
 	if _, exists := om.data[key]; !exists {
 		om.order = append(om.order, key)
 	}
@@ -61,7 +62,7 @@ func (om *OrderedMap) GetDefault(key string, def string) string {
 }
 
 func (om *OrderedMap) Keys() []string {
-	return om.order
+	return append([]string(nil), om.order...)
 }
 
 func (om OrderedMap) Clone() OrderedMap {
@@ -70,34 +71,6 @@ func (om OrderedMap) Clone() OrderedMap {
 		clone.Set(key, om.data[key])
 	}
 	return clone
-}
-
-func (om *OrderedMap) Print() {
-	for _, key := range om.Keys() {
-		value, _ := om.Get(key)
-		logging.LogDebug0("Print", "entry", "key", key, "value", value)
-	}
-}
-
-func (om *OrderedMap) Compare(om2 OrderedMap) {
-	var v1 string
-	var v2 string
-	var exists bool
-	equal := 0
-	for _, k := range om.Keys() {
-		if v2, exists = om2.data[k]; !exists {
-			fmt.Printf("key changed %s\n", k)
-		}
-		if v1, exists = om.data[k]; !exists {
-			fmt.Printf("key changed %s\n", k)
-		}
-		if v1 != v2 {
-			fmt.Printf("key changed %s\n", k)
-		} else {
-			equal += 1
-		}
-	}
-	fmt.Printf("keys equal: %02d\n\n\n", equal)
 }
 
 func NewOrderedMap() OrderedMap {

@@ -2,7 +2,6 @@ package logging
 
 import (
 	"context"
-	"log"
 	"log/slog"
 )
 
@@ -62,8 +61,4 @@ func LogWarn0(funcName string, msg string, args ...any) {
 
 func LogError0(funcName string, msg string, args ...any) {
 	Log(LE0, funcName, msg, args...)
-}
-
-func LogFatal(args ...any) {
-	log.Fatal(args...)
 }
