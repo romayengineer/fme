@@ -11,12 +11,8 @@ require (
 )
 
 require (
-	github.com/andybalholm/brotli v1.2.1 // indirect
 	github.com/deckarep/golang-set/v2 v2.8.0 // indirect
 	github.com/go-stack/stack v1.8.1 // indirect
-	github.com/klauspost/compress v1.16.7 // indirect
-	github.com/saintfish/chardet v0.0.0-20230101081208-5e3ef4b5456d // indirect
-	golang.org/x/text v0.37.0 // indirect
 )
 
 replace github.com/romayengineer/fme/go/browser => ../browser
