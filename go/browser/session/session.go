@@ -10,6 +10,8 @@ import (
 
 const sessionFilePath = ".session.json"
 
+// SaveSession stores the browser cookies and storage state. The file contains
+// live Facebook session credentials, so it is readable only by the current user.
 func SaveSession(storageState *playwright.StorageState) error {
 	if storageState == nil {
 		return fmt.Errorf("storage state is nil")
@@ -17,32 +19,40 @@ func SaveSession(storageState *playwright.StorageState) error {
 
 	data, err := json.MarshalIndent(storageState, "", "  ")
 	if err != nil {
-		return fmt.Errorf("error marshaling storage state: %v", err)
+		return fmt.Errorf("marshal storage state: %w", err)
 	}
 
-	err = os.WriteFile(sessionFilePath, data, 0644)
-	if err != nil {
-		return fmt.Errorf("error writing session file: %v", err)
+	if err := os.WriteFile(sessionFilePath, data, 0600); err != nil {
+		return fmt.Errorf("write session file: %w", err)
 	}
 
 	return nil
 }
 
-func LoadSession() *playwright.StorageState {
+// LoadSession returns nil and no error when no session file exists. A file that
+// cannot be read or parsed is reported so the caller can discard it and log in.
+func LoadSession() (*playwright.StorageState, error) {
 	data, err := os.ReadFile(sessionFilePath)
 	if err != nil {
-		return nil
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read session file: %w", err)
 	}
 
 	var storageState playwright.StorageState
-	err = json.Unmarshal(data, &storageState)
-	if err != nil {
-		return nil
+	if err := json.Unmarshal(data, &storageState); err != nil {
+		return nil, fmt.Errorf("parse session file: %w", err)
 	}
 
-	return &storageState
+	return &storageState, nil
 }
 
+// DeleteSession removes the stored session. A missing file is not an error.
 func DeleteSession() error {
-	return os.Remove(sessionFilePath)
+	err := os.Remove(sessionFilePath)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
 }

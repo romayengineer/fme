@@ -8,6 +8,7 @@ import (
 	"github.com/romayengineer/fme/go/browser/driver"
 	"github.com/romayengineer/fme/go/browser/pages"
 	"github.com/romayengineer/fme/go/browser/session"
+	"github.com/romayengineer/fme/go/core/logging"
 )
 
 type UserCredentials struct {
@@ -69,7 +70,10 @@ func EnsureLoggedIn(ctx driver.ContextWrapperInterface) error {
 
 func (fs *FacebookScrapper) Login(userCredentials UserCredentials) (driver.ContextWrapperInterface, error) {
 
-	savedSession := session.LoadSession()
+	savedSession, err := session.LoadSession()
+	if err != nil {
+		logging.LogWarn0("Login", "could not load saved session", "error", err)
+	}
 	if savedSession != nil {
 		fmt.Println("Loading existing session...")
 		ctx, err := fs.Browser.NewContext(savedSession, false)
@@ -90,8 +94,10 @@ func (fs *FacebookScrapper) Login(userCredentials UserCredentials) (driver.Conte
 			}
 			ctx.Close()
 		}
-		fmt.Println("session expired, deletting")
-		session.DeleteSession()
+		fmt.Println("session expired, deleting")
+		if err := session.DeleteSession(); err != nil {
+			logging.LogWarn0("Login", "could not delete expired session", "error", err)
+		}
 	}
 
 	fmt.Println("creating new session")
