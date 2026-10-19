@@ -1,4 +1,4 @@
-package model
+package extract
 
 import "testing"
 

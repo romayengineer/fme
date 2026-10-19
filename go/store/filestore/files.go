@@ -15,6 +15,7 @@ import (
 
 	"github.com/romayengineer/fme/go/core/jsonutil"
 	"github.com/romayengineer/fme/go/core/logging"
+	"github.com/romayengineer/fme/go/marketplace/extract"
 	"github.com/romayengineer/fme/go/marketplace/model"
 )
 
@@ -43,7 +44,7 @@ func SaveProductsIfAny(products []model.MarketplaceItemDetails) bool {
 // into data/__Details, so a freshly fetched PDP updates its detail record immediately
 // instead of waiting for the next ProcessData pass.
 func SaveProductsFrom(jsonDatas []any) int {
-	productExtractors := model.NewProductExtractors()
+	productExtractors := extract.NewProductExtractors()
 	saved := 0
 	for _, jsonData := range jsonDatas {
 		if SaveProductsIfAny(productExtractors.ExtractAll(jsonData)) {
@@ -60,7 +61,7 @@ func ProcessData(StartTimeToProcess int64) (int64, error) {
 	var filesDeletedCounter int
 	var gotRateLimit bool
 
-	productExtractors := model.NewProductExtractors()
+	productExtractors := extract.NewProductExtractors()
 	filesReadCounter, err := ForEachResponse(func(filePath string, jsonData map[string]any) bool {
 		lastFilePath = filePath
 
@@ -79,7 +80,7 @@ func ProcessData(StartTimeToProcess int64) (int64, error) {
 			return true
 		}
 
-		if model.IsErrorRateLimit(jsonData) {
+		if extract.IsErrorRateLimit(jsonData) {
 			gotRateLimit = true
 		}
 

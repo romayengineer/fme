@@ -11,7 +11,7 @@ import (
 	"github.com/romayengineer/fme/go/core/jsonutil"
 	"github.com/romayengineer/fme/go/core/logging"
 	"github.com/romayengineer/fme/go/core/orderedmap"
-	"github.com/romayengineer/fme/go/marketplace/model"
+	"github.com/romayengineer/fme/go/marketplace/extract"
 )
 
 var friendlyNamesToSkipSet = map[string]struct{}{
@@ -191,7 +191,7 @@ func (ceh *ContextEventHandlers) handleResponse(resp playwright.Response) {
 	if shouldSkipRequest.friendlyName == "MarketplacePDPContainerQuery" {
 		rateLimited := false
 		for _, jsonData := range jsonDatas {
-			if model.IsErrorRateLimit(jsonData) {
+			if extract.IsErrorRateLimit(jsonData) {
 				rateLimited = true
 				break
 			}

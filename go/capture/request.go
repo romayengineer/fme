@@ -8,7 +8,7 @@ import (
 	"github.com/romayengineer/fme/go/browser/driver"
 	"github.com/romayengineer/fme/go/core/jsonutil"
 	"github.com/romayengineer/fme/go/core/logging"
-	"github.com/romayengineer/fme/go/marketplace/model"
+	"github.com/romayengineer/fme/go/marketplace/extract"
 )
 
 func GetHeaders(request playwright.Request, simple bool) (map[string]string, error) {
@@ -177,7 +177,7 @@ func FetchPDP(page driver.PageWrapperInterface, template *PDPTemplate, productId
 	}
 
 	for _, jsonData := range jsonDatas {
-		if model.IsErrorRateLimit(jsonData) {
+		if extract.IsErrorRateLimit(jsonData) {
 			return PDPOutcome{RateLimited: true}, nil
 		}
 	}
@@ -186,7 +186,7 @@ func FetchPDP(page driver.PageWrapperInterface, template *PDPTemplate, productId
 	// write a response file (ProcessData would just delete it); save the raw body
 	// for inspection and let the caller tombstone the id.
 	for _, jsonData := range jsonDatas {
-		if reason, gone := model.ProductGone(jsonData); gone {
+		if reason, gone := extract.ProductGone(jsonData); gone {
 			logging.LogWarn0("FetchPDP", "listing no longer exists", "productId", productId, "reason", reason)
 			_ = sink.WriteDebugMiss(productId, body)
 			return PDPOutcome{Gone: true}, nil
