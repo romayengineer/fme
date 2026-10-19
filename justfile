@@ -2,7 +2,7 @@ set shell := ["bash", "-cu"]
 
 binary := "fme"
 cmd := "go/cmd/fme"
-modules := "go/analytics go/core go/marketplace go/browser go/store go/capture go/cmd/fme"
+modules := "go/analytics go/core go/marketplace go/browser go/store go/capture go/app go/cmd/fme"
 
 # List available recipes
 default:
