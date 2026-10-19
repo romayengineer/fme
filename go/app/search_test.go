@@ -113,6 +113,31 @@ func (d *fakeDetails) DescriptionStats() (DescriptionStats, error) {
 	return DescriptionStats{}, nil
 }
 
+type fakeResponseSink struct {
+	responses  int
+	byID       int
+	mergeCalls int
+	mergeCount int
+	debugMiss  int
+}
+
+func (s *fakeResponseSink) SaveResponse([]any, string) (int, error) {
+	s.responses++
+	return 1, nil
+}
+func (s *fakeResponseSink) SaveResponseByID([]any, string, string) (int, error) {
+	s.byID++
+	return 1, nil
+}
+func (s *fakeResponseSink) MergeProducts([]any) int {
+	s.mergeCalls++
+	return s.mergeCount
+}
+func (s *fakeResponseSink) WriteDebugMiss(string, []byte) error {
+	s.debugMiss++
+	return nil
+}
+
 type fakePDPState struct {
 	marked []string
 }

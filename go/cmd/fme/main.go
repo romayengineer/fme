@@ -35,6 +35,8 @@ func NewScrapper(flags Flags) ScrapperImpl {
 		blockImages = false
 		ScrollDownOnSearch = false
 	}
+	sink := app.NewFileResponseSink()
+
 	return ScrapperImpl{
 		BlockImages:             blockImages,
 		ScrollDownOnSearch:      ScrollDownOnSearch,
@@ -46,9 +48,10 @@ func NewScrapper(flags Flags) ScrapperImpl {
 		StartTimeToProcess:      0,
 		SearchKewords:           flags.keywords,
 		application: app.New(app.Deps{
-			Sessions: app.NewSessionFactory(blockImages),
+			Sessions: app.NewSessionFactory(blockImages, sink),
 			Details:  app.NewFileDetailStore(),
 			PDPState: app.NewFilePDPState(),
+			Sink:     sink,
 		}),
 	}
 }

@@ -12,7 +12,6 @@ import (
 	"github.com/romayengineer/fme/go/core/logging"
 	"github.com/romayengineer/fme/go/core/orderedmap"
 	"github.com/romayengineer/fme/go/marketplace/model"
-	"github.com/romayengineer/fme/go/store/filestore"
 )
 
 var friendlyNamesToSkipSet = map[string]struct{}{
@@ -64,6 +63,7 @@ var friendlyNamesToSkipSet = map[string]struct{}{
 type ContextEventHandlers struct {
 	ctx              driver.ContextWrapperInterface
 	extensionsToSkip map[string]struct{}
+	sink             Sink
 
 	mu     sync.Mutex
 	closed bool
@@ -183,6 +183,11 @@ func (ceh *ContextEventHandlers) handleResponse(resp playwright.Response) {
 	// in the browser, so we capture this first request as a reusable template and
 	// replay it for the other listings (see FetchPDP / PullDescriptions).
 	// See docs/redacted_description.md.
+	if ceh.sink == nil {
+		logging.LogWarn0("OnResponse", "no response sink configured, discarding response")
+		return
+	}
+
 	if shouldSkipRequest.friendlyName == "MarketplacePDPContainerQuery" {
 		rateLimited := false
 		for _, jsonData := range jsonDatas {
@@ -200,16 +205,16 @@ func (ceh *ContextEventHandlers) handleResponse(resp playwright.Response) {
 			// Write idempotently by targetId so the click response and the replayed
 			// response for the same product collapse into one file.
 			if targetId := GetPostDataTargetId(shouldSkipRequest.postDataMap); targetId != "" {
-				if _, err := filestore.WriteJsonResponseById(jsonDatas, shouldSkipRequest.friendlyName, targetId); err != nil {
-					logging.LogError0("OnResponse", "Error WriteJsonResponseById()", "error", err)
+				if _, err := ceh.sink.SaveResponseByID(jsonDatas, shouldSkipRequest.friendlyName, targetId); err != nil {
+					logging.LogError0("OnResponse", "Error SaveResponseByID()", "error", err)
 				}
-			} else if _, err := filestore.WriteJsonResponse(jsonDatas, shouldSkipRequest.friendlyName); err != nil {
-				logging.LogError0("OnResponse", "Error WriteJsonResponse()", "error", err)
+			} else if _, err := ceh.sink.SaveResponse(jsonDatas, shouldSkipRequest.friendlyName); err != nil {
+				logging.LogError0("OnResponse", "Error SaveResponse()", "error", err)
 			}
 
 			// Merge the description into data/__Details immediately, so the listing
 			// opened to capture the template is filled without waiting for ProcessData.
-			filestore.SaveProductsFrom(jsonDatas)
+			ceh.sink.MergeProducts(jsonDatas)
 		}
 
 		if headers, err := GetHeaders(request, false); err == nil {
@@ -223,8 +228,8 @@ func (ceh *ContextEventHandlers) handleResponse(resp playwright.Response) {
 		return
 	}
 
-	if _, err = filestore.WriteJsonResponse(jsonDatas, shouldSkipRequest.friendlyName); err != nil {
-		logging.LogError0("OnResponse", "Error WriteJsonResponse()", "error", err)
+	if _, err = ceh.sink.SaveResponse(jsonDatas, shouldSkipRequest.friendlyName); err != nil {
+		logging.LogError0("OnResponse", "Error SaveResponse()", "error", err)
 	}
 }
 
@@ -263,9 +268,10 @@ func (ceh *ContextEventHandlers) Route(r playwright.Route) {
 	}
 }
 
-func SetContextEventHandlers(ctx driver.ContextWrapperInterface, blockImages bool) *ContextEventHandlers {
+func SetContextEventHandlers(ctx driver.ContextWrapperInterface, blockImages bool, sink Sink) *ContextEventHandlers {
 	contextEventHandlers := &ContextEventHandlers{
-		ctx: ctx,
+		ctx:  ctx,
+		sink: sink,
 		extensionsToSkip: map[string]struct{}{
 			".jpg":  {},
 			".webp": {},

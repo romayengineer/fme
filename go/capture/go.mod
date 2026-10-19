@@ -7,7 +7,6 @@ require (
 	github.com/romayengineer/fme/go/browser v0.0.0
 	github.com/romayengineer/fme/go/core v0.0.0
 	github.com/romayengineer/fme/go/marketplace v0.0.0
-	github.com/romayengineer/fme/go/store v0.0.0
 )
 
 require (
@@ -20,5 +19,3 @@ replace github.com/romayengineer/fme/go/browser => ../browser
 replace github.com/romayengineer/fme/go/core => ../core
 
 replace github.com/romayengineer/fme/go/marketplace => ../marketplace
-
-replace github.com/romayengineer/fme/go/store => ../store

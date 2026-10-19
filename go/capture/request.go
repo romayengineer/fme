@@ -9,7 +9,6 @@ import (
 	"github.com/romayengineer/fme/go/core/jsonutil"
 	"github.com/romayengineer/fme/go/core/logging"
 	"github.com/romayengineer/fme/go/marketplace/model"
-	"github.com/romayengineer/fme/go/store/filestore"
 )
 
 func GetHeaders(request playwright.Request, simple bool) (map[string]string, error) {
@@ -128,7 +127,11 @@ type PDPOutcome struct {
 // The request must run in the page: Facebook rejects the replayed GraphQL request
 // with error 1357054 when it is issued outside the page context (e.g. via an
 // APIRequestContext), even though the body and headers are identical.
-func FetchPDP(page driver.PageWrapperInterface, template *PDPTemplate, productId string) (PDPOutcome, error) {
+func FetchPDP(page driver.PageWrapperInterface, template *PDPTemplate, productId string, sink Sink) (PDPOutcome, error) {
+	if sink == nil {
+		return PDPOutcome{}, fmt.Errorf("response sink is not configured")
+	}
+
 	postDataMap := template.PostDataMap.Clone()
 	if err := postDataMap.SetJsonString("variables", "targetId", productId); err != nil {
 		return PDPOutcome{}, fmt.Errorf("error setting targetId: %w", err)
@@ -185,22 +188,22 @@ func FetchPDP(page driver.PageWrapperInterface, template *PDPTemplate, productId
 	for _, jsonData := range jsonDatas {
 		if reason, gone := model.ProductGone(jsonData); gone {
 			logging.LogWarn0("FetchPDP", "listing no longer exists", "productId", productId, "reason", reason)
-			_ = filestore.WriteDebugMiss(productId, body)
+			_ = sink.WriteDebugMiss(productId, body)
 			return PDPOutcome{Gone: true}, nil
 		}
 	}
 
 	// Merge the description into data/__Details immediately so it is filled as soon
 	// as the response arrives, even if the run is interrupted before ProcessData.
-	if saved := filestore.SaveProductsFrom(jsonDatas); saved == 0 {
+	if saved := sink.MergeProducts(jsonDatas); saved == 0 {
 		// No product and not a rate limit: an ambiguous failure. Save the raw body
 		// and report it so the caller can count it and eventually skip the listing.
-		_ = filestore.WriteDebugMiss(productId, body)
+		_ = sink.WriteDebugMiss(productId, body)
 		return PDPOutcome{NoProduct: true}, nil
 	}
 
-	if _, err := filestore.WriteJsonResponseById(jsonDatas, "MarketplacePDPContainerQuery", productId); err != nil {
-		return PDPOutcome{}, fmt.Errorf("error WriteJsonResponseById: %w", err)
+	if _, err := sink.SaveResponseByID(jsonDatas, "MarketplacePDPContainerQuery", productId); err != nil {
+		return PDPOutcome{}, fmt.Errorf("save PDP response: %w", err)
 	}
 
 	return PDPOutcome{}, nil

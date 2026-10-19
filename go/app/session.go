@@ -25,13 +25,14 @@ type Waiter interface {
 // a persistent Chrome profile or saved credentials.
 type BrowserSessionFactory struct {
 	BlockImages bool
+	Sink        capture.Sink
 }
 
 // NewSessionFactory returns a factory that configures the browser for the
 // current action. The .env file is read lazily in Open, so actions such as
 // install_drivers work before credentials are configured.
-func NewSessionFactory(blockImages bool) *BrowserSessionFactory {
-	return &BrowserSessionFactory{BlockImages: blockImages}
+func NewSessionFactory(blockImages bool, sink capture.Sink) *BrowserSessionFactory {
+	return &BrowserSessionFactory{BlockImages: blockImages, Sink: sink}
 }
 
 // Open implements SessionFactory.
@@ -68,7 +69,7 @@ func (f *BrowserSessionFactory) Open() (*Session, error) {
 		}
 	}
 
-	handlers := capture.SetContextEventHandlers(ctx, f.BlockImages)
+	handlers := capture.SetContextEventHandlers(ctx, f.BlockImages, f.Sink)
 
 	return &Session{Context: ctx, Waiter: handlers}, nil
 }

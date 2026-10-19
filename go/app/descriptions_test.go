@@ -26,6 +26,7 @@ func TestPullDescriptionsNothingToPullSkipsSession(t *testing.T) {
 		Sessions: sessions,
 		Details:  details,
 		PDPState: &fakePDPState{},
+		Sink:     &fakeResponseSink{},
 	})
 
 	if err := app.PullDescriptions(PullDescriptionsOptions{}); err != nil {
@@ -52,6 +53,7 @@ func TestPullDescriptionsStopsOnRateLimit(t *testing.T) {
 		Sessions: &fakeSessions{session: &Session{Context: ctx, Waiter: &fakeWaiter{}}},
 		Details:  details,
 		PDPState: state,
+		Sink:     &fakeResponseSink{},
 	})
 
 	if err := app.PullDescriptions(PullDescriptionsOptions{RateLimitWaitSeconds: 0}); err != nil {
@@ -67,7 +69,7 @@ func TestPullDescriptionsStopsOnRateLimit(t *testing.T) {
 
 func TestFetchPDPWithBackoffExhaustedBudget(t *testing.T) {
 	template := testPDPTemplate()
-	app := New(Deps{})
+	app := New(Deps{Sink: &fakeResponseSink{}})
 
 	outcome, waited, err := app.fetchPDPWithBackoff(
 		&fakePage{body: `{"errors":[{"message":"Rate limit exceeded"}]}`},

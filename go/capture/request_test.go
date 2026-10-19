@@ -1,14 +1,11 @@
 package capture
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/mxschmitt/playwright-go"
 	"github.com/romayengineer/fme/go/browser/driver"
 	"github.com/romayengineer/fme/go/core/orderedmap"
-	"github.com/romayengineer/fme/go/store/filestore"
 )
 
 // fakePage returns a canned response body from Evaluate and satisfies the
@@ -25,6 +22,33 @@ func (f fakePage) GetByRole(playwright.AriaRole) driver.LocatorWrapperInterface 
 }
 func (f fakePage) Evaluate(string, ...any) (any, error) { return f.body, nil }
 
+type fakeSink struct {
+	responses   int
+	byID        int
+	lastID      string
+	mergeCalls  int
+	mergeResult int
+	debugMisses int
+}
+
+func (s *fakeSink) SaveResponse([]any, string) (int, error) {
+	s.responses++
+	return 1, nil
+}
+func (s *fakeSink) SaveResponseByID(_ []any, _ string, id string) (int, error) {
+	s.byID++
+	s.lastID = id
+	return 1, nil
+}
+func (s *fakeSink) MergeProducts([]any) int {
+	s.mergeCalls++
+	return s.mergeResult
+}
+func (s *fakeSink) WriteDebugMiss(string, []byte) error {
+	s.debugMisses++
+	return nil
+}
+
 func testTemplate() *PDPTemplate {
 	om := orderedmap.NewOrderedMap()
 	om.Set("variables", `{"targetId":"original"}`)
@@ -37,71 +61,76 @@ func testTemplate() *PDPTemplate {
 }
 
 func TestFetchPDPSuccess(t *testing.T) {
-	t.Chdir(t.TempDir())
-
 	body := `{"data":{"viewer":{"marketplace_product_details_page":{"target":{"id":"999","redacted_description":{"text":"hi"}}}}}}`
-	outcome, err := FetchPDP(fakePage{body: body}, testTemplate(), "999")
+	sink := &fakeSink{mergeResult: 1}
+
+	outcome, err := FetchPDP(fakePage{body: body}, testTemplate(), "999", sink)
 	if err != nil {
 		t.Fatalf("FetchPDP: %v", err)
 	}
 	if outcome != (PDPOutcome{}) {
 		t.Fatalf("outcome = %+v, want success", outcome)
 	}
-	if _, err := os.Stat(filepath.Join(filestore.DataDir, "MarketplacePDPContainerQuery", "response_0_999.json")); err != nil {
-		t.Errorf("expected response file: %v", err)
+	if sink.byID != 1 || sink.lastID != "999" {
+		t.Errorf("SaveResponseByID calls = %d, lastID = %q, want 1/999", sink.byID, sink.lastID)
 	}
-	if _, err := os.Stat(filepath.Join(filestore.DataDir, "__Details", "detail_999.json")); err != nil {
-		t.Errorf("expected merged detail file: %v", err)
+	if sink.mergeCalls != 1 {
+		t.Errorf("MergeProducts calls = %d, want 1", sink.mergeCalls)
 	}
 }
 
 func TestFetchPDPGone(t *testing.T) {
-	t.Chdir(t.TempDir())
-
 	body := `{"data":{"viewer":{"marketplace_product_details_page":{"id":"page"}}}}`
-	outcome, err := FetchPDP(fakePage{body: body}, testTemplate(), "555")
+	sink := &fakeSink{}
+
+	outcome, err := FetchPDP(fakePage{body: body}, testTemplate(), "555", sink)
 	if err != nil {
 		t.Fatalf("FetchPDP: %v", err)
 	}
 	if !outcome.Gone {
 		t.Fatalf("outcome = %+v, want Gone", outcome)
 	}
-	if _, err := os.Stat(filepath.Join(filestore.DataDir, "MarketplacePDPContainerQuery", "response_0_555.json")); !os.IsNotExist(err) {
-		t.Error("gone listing must not write a response file")
+	if sink.byID != 0 {
+		t.Errorf("gone listing wrote a response (byID=%d)", sink.byID)
 	}
-	if _, err := os.Stat(filepath.Join(filestore.DataDir, "MarketplacePDPContainerQuery", "debug", "miss_555.json")); err != nil {
-		t.Errorf("expected debug miss dump: %v", err)
+	if sink.debugMisses != 1 {
+		t.Errorf("debug misses = %d, want 1", sink.debugMisses)
 	}
 }
 
 func TestFetchPDPNoProduct(t *testing.T) {
-	t.Chdir(t.TempDir())
+	sink := &fakeSink{mergeResult: 0}
 
-	outcome, err := FetchPDP(fakePage{body: `{"data":{"unrelated":true}}`}, testTemplate(), "7")
+	outcome, err := FetchPDP(fakePage{body: `{"data":{"unrelated":true}}`}, testTemplate(), "7", sink)
 	if err != nil {
 		t.Fatalf("FetchPDP: %v", err)
 	}
 	if !outcome.NoProduct || outcome.Gone || outcome.RateLimited {
 		t.Fatalf("outcome = %+v, want NoProduct", outcome)
 	}
-	if _, err := os.Stat(filepath.Join(filestore.DataDir, "MarketplacePDPContainerQuery", "debug", "miss_7.json")); err != nil {
-		t.Errorf("expected debug miss dump: %v", err)
+	if sink.debugMisses != 1 {
+		t.Errorf("debug misses = %d, want 1", sink.debugMisses)
 	}
 }
 
 func TestFetchPDPRateLimited(t *testing.T) {
-	t.Chdir(t.TempDir())
-
 	body := `{"errors":[{"message":"Rate limit exceeded","code":1675004}]}`
-	outcome, err := FetchPDP(fakePage{body: body}, testTemplate(), "8")
+	sink := &fakeSink{}
+
+	outcome, err := FetchPDP(fakePage{body: body}, testTemplate(), "8", sink)
 	if err != nil {
 		t.Fatalf("FetchPDP: %v", err)
 	}
 	if !outcome.RateLimited {
 		t.Fatalf("outcome = %+v, want RateLimited", outcome)
 	}
-	entries, _ := os.ReadDir(filepath.Join(filestore.DataDir, "MarketplacePDPContainerQuery"))
-	if len(entries) != 0 {
-		t.Errorf("rate-limited fetch must not persist files, found %d", len(entries))
+	if sink.responses != 0 || sink.byID != 0 || sink.mergeCalls != 0 || sink.debugMisses != 0 {
+		t.Errorf("rate-limited fetch touched the sink: %+v", sink)
+	}
+}
+
+func TestFetchPDPRequiresSink(t *testing.T) {
+	if _, err := FetchPDP(fakePage{}, testTemplate(), "1", nil); err == nil {
+		t.Fatal("FetchPDP returned no error for a nil sink")
 	}
 }

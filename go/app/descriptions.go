@@ -30,6 +30,9 @@ func (a *App) PullDescriptions(opts PullDescriptionsOptions) error {
 	if a.Sessions == nil {
 		return fmt.Errorf("pull-description: session factory is not configured")
 	}
+	if a.Sink == nil {
+		return fmt.Errorf("pull-description: response sink is not configured")
+	}
 
 	var runErr error
 
@@ -209,7 +212,7 @@ func (a *App) fetchPDPWithBackoff(page driver.PageWrapperInterface, template *ca
 	waited := 0
 	wait := opts.RateLimitWaitSeconds
 	for {
-		outcome, err := capture.FetchPDP(page, template, productId)
+		outcome, err := capture.FetchPDP(page, template, productId, a.Sink)
 		if err != nil {
 			return outcome, waited, err
 		}
