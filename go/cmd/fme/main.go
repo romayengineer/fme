@@ -427,7 +427,15 @@ func (s *ScrapperImpl) GetDetails() {
 			return true
 		}
 
-		pgs.GoToProduct(productId.(string))
+		productID, ok := productId.(string)
+		if !ok {
+			logging.LogWarn0("GetDetails", "skipping invalid product id", "id", productId)
+			return true
+		}
+		if err := pgs.GoToProduct(productID); err != nil {
+			logging.LogError0("GetDetails", "could not open product", "productId", productID, "error", err)
+			return true
+		}
 		time.Sleep(3 * time.Second)
 
 		return true

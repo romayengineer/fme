@@ -1,6 +1,7 @@
 package pages
 
 import (
+	"fmt"
 	"net/url"
 	"strings"
 	"time"
@@ -40,12 +41,18 @@ func NewPages(page driver.PageWrapperInterface) (PagesInterface, error) {
 }
 
 func (pl *Pages) IsInHomePage() bool {
-	pl.Page.Locator(pl.InputSearchBar).WaitFor(30_000)
+	if err := pl.Page.Locator(pl.InputSearchBar).WaitFor(30_000); err != nil {
+		logging.LogDebug0("IsInHomePage", "search bar not visible, checking URL", "error", err)
+	}
 	return pl.isLoggedIn()
 }
 
 func (pl *Pages) isLoggedIn() bool {
-	items, _ := pl.Page.Locator(pl.InputSearchBar).All()
+	items, err := pl.Page.Locator(pl.InputSearchBar).All()
+	if err != nil {
+		logging.LogDebug0("isLoggedIn", "could not inspect search bar", "error", err)
+		return false
+	}
 	if len(items) > 0 {
 		return true
 	}
@@ -75,26 +82,57 @@ func (pl *Pages) WaitForHomePage(timeoutSeconds int) bool {
 }
 
 func (pl *Pages) ScrollDown(maxSeconds int) error {
+	if maxSeconds <= 0 {
+		logging.LogInfo0("ScrollDown", "scrolling disabled")
+		return nil
+	}
+
 	maxScrollHeight := 0
 	start := time.Now()
 	lastIncrease := start
 	for {
 		// Stop only after the page height has failed to grow for maxSeconds.
-		if maxSeconds > 0 && time.Since(lastIncrease) >= time.Duration(maxSeconds)*time.Second {
+		if time.Since(lastIncrease) >= time.Duration(maxSeconds)*time.Second {
 			logging.LogInfo0("ScrollDown", "no height increase, stopping",
 				"waitedSeconds", maxSeconds, "elapsedSeconds", int(time.Since(start).Seconds()), "maxScrollHeight", maxScrollHeight)
 			return nil
 		}
-		scrollHeight, _ := pl.Page.Evaluate("document.body.scrollHeight")
-		if intHeight, ok := scrollHeight.(int); ok {
+
+		scrollHeight, err := pl.Page.Evaluate("document.body.scrollHeight")
+		if err != nil {
+			return fmt.Errorf("read page scroll height: %w", err)
+		}
+		if intHeight, ok := toInt(scrollHeight); ok {
 			if intHeight > maxScrollHeight {
 				lastIncrease = time.Now()
 				maxScrollHeight = intHeight
 				logging.LogDebug0("ScrollDown", "maxScrollHeight", "height", maxScrollHeight)
 			}
+		} else {
+			logging.LogDebug0("ScrollDown", "unexpected scrollHeight type", "type", fmt.Sprintf("%T", scrollHeight))
 		}
+
 		time.Sleep(1 * time.Second)
-		pl.Page.Evaluate("window.scrollTo(0, document.body.scrollHeight)")
+		if _, err := pl.Page.Evaluate("window.scrollTo(0, document.body.scrollHeight)"); err != nil {
+			return fmt.Errorf("scroll page: %w", err)
+		}
+	}
+}
+
+// toInt converts a JavaScript number value returned by Playwright. JS numbers
+// decode as float64, so an int assertion alone would silently never match.
+func toInt(value any) (int, bool) {
+	switch v := value.(type) {
+	case int:
+		return v, true
+	case int64:
+		return int(v), true
+	case float64:
+		return int(v), true
+	case float32:
+		return int(v), true
+	default:
+		return 0, false
 	}
 }
 
@@ -102,7 +140,9 @@ func (pl *Pages) MarketpaceSearch(searchKeyworkds string, scrollDown bool, scrol
 	params := url.Values{}
 	params.Add("query", searchKeyworkds)
 	baseUrl := "https://www.facebook.com/marketplace/category/search/?" + params.Encode()
-	pl.Page.Goto(baseUrl)
+	if err := pl.Page.Goto(baseUrl); err != nil {
+		return fmt.Errorf("open marketplace search: %w", err)
+	}
 	if scrollDown {
 		return pl.ScrollDown(scrollSeconds)
 	}

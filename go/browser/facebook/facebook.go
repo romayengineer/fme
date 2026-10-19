@@ -57,7 +57,10 @@ func EnsureLoggedIn(ctx driver.ContextWrapperInterface) error {
 		return fmt.Errorf("error Goto: %v", err)
 	}
 
-	pages, _ := pages.NewPages(page)
+	pages, err := pages.NewPages(page)
+	if err != nil {
+		return fmt.Errorf("create page helpers: %w", err)
+	}
 	fmt.Println("Waiting for Facebook session...")
 	if !pages.WaitForHomePage(600) {
 		urlAny, _ := page.Evaluate("location.href")
@@ -124,23 +127,32 @@ func (fs *FacebookScrapper) Login(userCredentials UserCredentials) (driver.Conte
 	fmt.Printf("Successfully opened %s in Chromium\n", url)
 
 	emailInput := page.Locator("input[name=email]")
-	emailInput.Fill(userCredentials.Username)
+	if err := emailInput.Fill(userCredentials.Username); err != nil {
+		return nil, fmt.Errorf("fill email: %w", err)
+	}
 
 	passwordInput := page.Locator("input[name=pass]")
-	passwordInput.Fill(userCredentials.Password)
+	if err := passwordInput.Fill(userCredentials.Password); err != nil {
+		return nil, fmt.Errorf("fill password: %w", err)
+	}
 
 	// Find and click the Log In button using getByRole
-	loginButtons, _ := page.Locator("span:has-text('Log in')").All()
+	loginButtons, err := page.Locator("span:has-text('Log in')").All()
+	if err != nil {
+		return nil, fmt.Errorf("find login buttons: %w", err)
+	}
 	if len(loginButtons) != 4 {
-		return nil, fmt.Errorf("log in button must be 4")
+		return nil, fmt.Errorf("log in button must be 4, found %d", len(loginButtons))
 	}
 	loginButton := page.Locator("span:has-text('Log in')").Nth(1)
-	err = loginButton.Click()
-	if err != nil {
-		return nil, fmt.Errorf("error clicking Log In button: %v", err)
+	if err := loginButton.Click(); err != nil {
+		return nil, fmt.Errorf("click Log In button: %w", err)
 	}
 
-	pages, _ := pages.NewPages(page)
+	pages, err := pages.NewPages(page)
+	if err != nil {
+		return nil, fmt.Errorf("create page helpers: %w", err)
+	}
 	fmt.Println("Waiting for login to complete (solve any captcha in the browser)...")
 	if !pages.WaitForHomePage(600) {
 		return nil, fmt.Errorf("not in home page")
@@ -149,12 +161,11 @@ func (fs *FacebookScrapper) Login(userCredentials UserCredentials) (driver.Conte
 	// Save the session for future use
 	storageState, err := ctx.StorageState()
 	if err != nil {
-		return nil, fmt.Errorf("error: could not get session: %v\n", err)
+		return nil, fmt.Errorf("get session storage state: %w", err)
 	}
 
-	err = session.SaveSession(storageState)
-	if err != nil {
-		return nil, fmt.Errorf("error: could not save session: %v\n", err)
+	if err := session.SaveSession(storageState); err != nil {
+		return nil, fmt.Errorf("save session: %w", err)
 	}
 
 	fmt.Println("Session saved successfully")
