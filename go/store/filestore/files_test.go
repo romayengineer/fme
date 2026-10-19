@@ -70,6 +70,43 @@ func TestSaveProductsFromNoProduct(t *testing.T) {
 	}
 }
 
+func TestWriteFileAndDirsWritesAtomically(t *testing.T) {
+	tmpDir := t.TempDir()
+	name := filepath.Join(tmpDir, "nested", "detail_1.json")
+
+	if err := WriteFileAndDirs(name, []byte(`{"first":true}`), 0600); err != nil {
+		t.Fatalf("first write: %v", err)
+	}
+
+	info, err := os.Stat(name)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0600 {
+		t.Errorf("mode = %o, want 600", got)
+	}
+
+	if err := WriteFileAndDirs(name, []byte(`{"second":true}`), 0644); err != nil {
+		t.Fatalf("second write: %v", err)
+	}
+
+	body, err := os.ReadFile(name)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if string(body) != `{"second":true}` {
+		t.Errorf("content = %s, want the replacement payload", body)
+	}
+
+	entries, err := os.ReadDir(filepath.Dir(name))
+	if err != nil {
+		t.Fatalf("read dir: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("got %d entries, want 1 (no temp files left behind)", len(entries))
+	}
+}
+
 func TestForEachDetailReturnsDataDirectoryErrors(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Chdir(tmpDir)

@@ -164,7 +164,48 @@ func WriteFileAndDirs(name string, data []byte, perm os.FileMode) error {
 	if err := os.MkdirAll(nameDir, 0755); err != nil {
 		return err
 	}
-	return os.WriteFile(name, data, perm)
+	return writeFileAtomic(name, data, perm)
+}
+
+// writeFileAtomic writes data to a temporary file in the destination directory
+// and renames it into place, so readers never observe a partially written file
+// and a crash leaves the previous version intact.
+func writeFileAtomic(name string, data []byte, perm os.FileMode) error {
+	dir := filepath.Dir(name)
+
+	tmp, err := os.CreateTemp(dir, "."+filepath.Base(name)+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("create temp file for %s: %w", name, err)
+	}
+	tmpName := tmp.Name()
+
+	cleanup := func() {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+	}
+
+	if _, err := tmp.Write(data); err != nil {
+		cleanup()
+		return fmt.Errorf("write temp file for %s: %w", name, err)
+	}
+	if err := tmp.Chmod(perm); err != nil {
+		cleanup()
+		return fmt.Errorf("chmod temp file for %s: %w", name, err)
+	}
+	if err := tmp.Sync(); err != nil {
+		cleanup()
+		return fmt.Errorf("sync temp file for %s: %w", name, err)
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpName)
+		return fmt.Errorf("close temp file for %s: %w", name, err)
+	}
+	if err := os.Rename(tmpName, name); err != nil {
+		_ = os.Remove(tmpName)
+		return fmt.Errorf("rename temp file to %s: %w", name, err)
+	}
+
+	return nil
 }
 
 func TimeNow() int64 {
