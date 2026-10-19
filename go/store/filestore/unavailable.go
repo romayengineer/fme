@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/romayengineer/fme/go/core/logging"
+	"github.com/romayengineer/fme/go/store/paths"
 )
 
 // DefaultMissThreshold is how many ambiguous "no product" PDP fetches a listing may
@@ -19,11 +20,10 @@ const DefaultMissThreshold = 3
 const (
 	unavailablePrefix = "unavailable_0_"
 	missPrefix        = "miss_0_"
-	debugDirName      = "debug"
 )
 
 func pdpDir() string {
-	return filepath.Join(DataDir, pdpDirName)
+	return paths.PDPDir()
 }
 
 // MarkUnavailable records that productId no longer exists so later pull_description
@@ -117,7 +117,7 @@ func ClearPDPFailure(productId string) {
 // WriteDebugMiss saves the raw body of a non-product PDP reply so the exact
 // dead-listing payload can be inspected later (data/.../debug/miss_<id>.json).
 func WriteDebugMiss(productId string, body []byte) error {
-	path := filepath.Join(pdpDir(), debugDirName, "miss_"+productId+".json")
+	path := filepath.Join(paths.PDPDebugDir(), "miss_"+productId+".json")
 	return WriteFileAndDirs(path, body, 0644)
 }
 

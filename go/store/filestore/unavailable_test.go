@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/romayengineer/fme/go/store/paths"
 )
 
 func TestUnavailableMarkerRoundTrip(t *testing.T) {
@@ -69,7 +71,7 @@ func TestWriteDebugMiss(t *testing.T) {
 	if err := WriteDebugMiss("abc", []byte(`{"data":{"viewer":{}}}`)); err != nil {
 		t.Fatalf("WriteDebugMiss: %v", err)
 	}
-	path := filepath.Join(pdpDir(), debugDirName, "miss_abc.json")
+	path := filepath.Join(pdpDir(), paths.DebugDirName, "miss_abc.json")
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("debug miss file missing: %v", err)
 	}

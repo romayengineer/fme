@@ -12,10 +12,11 @@ import (
 	"sync"
 
 	"github.com/romayengineer/fme/go/analytics"
+	"github.com/romayengineer/fme/go/store/paths"
 )
 
 // DefaultDir is where product detail files live.
-const DefaultDir = "data/__Details"
+var DefaultDir = paths.DetailDir()
 
 // FileSource reads product locations from data/__Details/detail_*.json, the same
 // files the rest of FME materializes, so heat maps work without the PocketBase

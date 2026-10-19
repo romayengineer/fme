@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/romayengineer/fme/go/core/logging"
 	"github.com/romayengineer/fme/go/marketplace/extract"
 	"github.com/romayengineer/fme/go/marketplace/model"
+	"github.com/romayengineer/fme/go/store/paths"
 )
 
 func SaveProductsIfAny(products []model.MarketplaceItemDetails) bool {
@@ -107,18 +107,12 @@ func ProcessData(StartTimeToProcess int64) (int64, error) {
 }
 
 func GetTimestamp(filePath string) (int64, error) {
-	lastFilePathParts := strings.SplitN(filepath.Base(filePath), "_", 3)
-	if len(lastFilePathParts) < 2 {
-		logging.LogWarn0("GetTimestamp", "filePath does not have time", "filePath", filePath)
-		return 0, fmt.Errorf("filePath does not have time")
-	}
-	lastTimestampStr := lastFilePathParts[1]
-	lastTimestamp, err := strconv.ParseInt(lastTimestampStr, 10, 64)
+	timestamp, err := paths.ParseTimestamp(filePath)
 	if err != nil {
-		logging.LogError0("GetTimestamp", "cound not get timestamp", "filePath", filePath)
-		return 0, fmt.Errorf("could not parse timestamp from %s: %w", filePath, err)
+		logging.LogWarn0("GetTimestamp", "could not read timestamp", "filePath", filePath, "error", err)
+		return 0, err
 	}
-	return lastTimestamp, nil
+	return timestamp, nil
 }
 
 func WriteJsonResponse(jsonDatas []any, friendly_name string) (int, error) {
@@ -156,7 +150,7 @@ func WriteJsonFileDeterministic(prefix string, friendlyName string, key string, 
 	if err != nil {
 		return err
 	}
-	filename := filepath.Join(DataDir, friendlyName, fmt.Sprintf("%s_0_%s.json", prefix, key))
+	filename := paths.ResponseFileByID(friendlyName, prefix, key)
 	return WriteFileAndDirs(filename, indented, 0644)
 }
 
@@ -221,9 +215,7 @@ func WriteRandomJsonFile(prefix string, friendly_name string, body []byte) error
 	timestamp := TimeNow()
 	random := rand.Intn(1000000)
 
-	fileDir := filepath.Join(DataDir, friendly_name)
-
-	filename := filepath.Join(fileDir, fmt.Sprintf("%s_%d_%06d.json", prefix, timestamp, random))
+	filename := paths.ResponseFile(friendly_name, prefix, timestamp, random)
 
 	return WriteFileAndDirs(filename, body, 0644)
 }
@@ -325,14 +317,12 @@ func ForEachDetail(process func(filePath string, jsonData map[string]any) bool, 
 	return ForEachJsonInData("detail_", process, sortit)
 }
 
-const pdpDirName = "MarketplacePDPContainerQuery"
-
 // LoadPDPProductIds returns the set of product ids that already have a captured PDP
 // response on disk, so pull_description can skip them (regardless of filename).
 func LoadPDPProductIds() map[string]struct{} {
 	ids := map[string]struct{}{}
 
-	dir := filepath.Join(DataDir, pdpDirName)
+	dir := paths.PDPDir()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return ids
@@ -395,7 +385,7 @@ func PendingDescriptionCount(existing, unavailable map[string]struct{}) (pending
 // DedupePDP removes duplicate PDP response files, keeping only the most recently
 // modified file for each product id.
 func DedupePDP() {
-	dir := filepath.Join(DataDir, pdpDirName)
+	dir := paths.PDPDir()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		logging.LogError0("DedupePDP", "cannot read PDP dir", "dir", dir, "error", err)

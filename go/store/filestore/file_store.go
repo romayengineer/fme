@@ -2,16 +2,16 @@ package filestore
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"sync"
 
 	"github.com/romayengineer/fme/go/marketplace/model"
+	"github.com/romayengineer/fme/go/store/paths"
 )
 
-const DataDir = "data"
+const DataDir = paths.DataDir
 
 // detailMu serializes every detail-file read-modify-write. Each Save creates a
 // fresh FileStoreImpl, so a per-instance mutex cannot protect the same file from
@@ -32,9 +32,11 @@ type FileStore[T any] interface {
 }
 
 func NewProductFileStore(productId string) FileStore[model.MarketplaceItemDetails] {
-	fileName := fmt.Sprintf("detail_%v.json", productId)
-	fileDir := fmt.Sprintf("%v/__Details", DataDir)
-	return &FileStoreImpl[model.MarketplaceItemDetails]{id: productId, fileName: fileName, fileDir: fileDir}
+	return &FileStoreImpl[model.MarketplaceItemDetails]{
+		id:       productId,
+		fileName: paths.DetailFileName(productId),
+		fileDir:  paths.DetailDir(),
+	}
 }
 
 func (pfs *FileStoreImpl[T]) SetDir(dir string) {
