@@ -1,0 +1,333 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+# Report every finding. The default caps (50 per linter, 3 identical) hide
+# problems and make a clean run ambiguous.
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+linters:
+  # Pin the linter set explicitly so a tool upgrade cannot silently add rules.
+  default: none
+  enable:
+    # Correctness and error handling.
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - bodyclose
+    - errorlint
+    - nilerr
+    - nilnil
+    - nilnesserr
+    - noctx
+    - containedctx
+    - contextcheck
+    - exhaustive
+    - rowserrcheck
+    - sqlclosecheck
+    - errchkjson
+    - errname
+    - unparam
+    - unconvert
+    - copyloopvar
+    - musttag
+    - misspell
+    - asciicheck
+    - gocheckcompilerdirectives
+
+    # API and style.
+    - revive
+    - godot
+    - usestdlibvars
+    - perfsprint
+    - intrange
+    - modernize
+    - prealloc
+    - makezero
+    - gochecknoinits
+    - gocritic
+    - gosec
+    - nolintlint
+    - recvcheck
+    - tagalign
+    - dupword
+    - thelper
+    - usetesting
+    - testifylint
+
+    # Complexity.
+    - cyclop
+    - gocognit
+    - funlen
+    - nestif
+    - dupl
+
+    # Module boundaries and dependency allow-lists.
+    - depguard
+
+  settings:
+    # One unit of decision per branch. Keep functions at one level of
+    # abstraction; extract named steps instead of raising this limit.
+    cyclop:
+      max-complexity: 5
+
+    # Secondary gate for nesting that cyclomatic complexity understates.
+    gocognit:
+      min-complexity: 15
+
+    # A function must fit on a screen and do one thing. Tests obey the same
+    # limits; split them into subtests and helpers.
+    funlen:
+      lines: 40
+      statements: 25
+    nestif:
+      min-complexity: 3
+    dupl:
+      threshold: 100
+
+    # A suppression must name one linter and explain why. Blanket or silent
+    # nolints are errors, and stale nolints must be removed.
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+      allow-unused: false
+
+    # Explicit rule list, not the tool's evolving defaults.
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: error-naming
+        - name: error-return
+        - name: error-strings
+        - name: exported
+          arguments:
+            - check-public-interface
+        - name: if-return
+        - name: indent-error-flow
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: superfluous-else
+        - name: time-naming
+        - name: unexported-return
+        - name: unused-parameter
+        - name: var-naming
+
+    # README "Go architecture": dependencies point in one direction,
+    # cmd/fme -> app -> {browser, capture, store, marketplace, analytics} -> core.
+    # Every import of another fme package (or a third-party package) needs an
+    # explicit entry here, which is the review checkpoint for dependency
+    # decisions. Package entries ending in $ match only that package.
+    depguard:
+      rules:
+        core:
+          files:
+            - "**/go/core/**"
+          allow:
+            - "$gostd"
+
+        marketplace_model:
+          files:
+            - "**/go/marketplace/model/**"
+          allow:
+            - "$gostd"
+
+        marketplace_extract:
+          files:
+            - "**/go/marketplace/extract/**"
+          allow:
+            - "$gostd"
+            - "github.com/romayengineer/fme/go/core"
+            - "github.com/romayengineer/fme/go/marketplace/model"
+
+        store_paths:
+          files:
+            - "**/go/store/paths/**"
+          allow:
+            - "$gostd"
+
+        store_jsonstore:
+          files:
+            - "**/go/store/jsonstore/**"
+          allow:
+            - "$gostd"
+
+        store_pdpstate:
+          files:
+            - "**/go/store/pdpstate/**"
+          allow:
+            - "$gostd"
+            - "github.com/romayengineer/fme/go/core"
+            - "github.com/romayengineer/fme/go/store/jsonstore"
+            - "github.com/romayengineer/fme/go/store/paths"
+
+        store_filestore:
+          files:
+            - "**/go/store/filestore/**"
+          allow:
+            - "$gostd"
+            - "github.com/romayengineer/fme/go/core"
+            - "github.com/romayengineer/fme/go/marketplace"
+            - "github.com/romayengineer/fme/go/store"
+            # Tests use UUIDs and testify assertions.
+            - "github.com/google/uuid"
+            - "github.com/stretchr/testify"
+
+        store_db:
+          files:
+            - "**/go/store/db/**"
+          allow:
+            - "$gostd"
+            - "github.com/romayengineer/fme/go/core"
+            - "github.com/romayengineer/fme/go/marketplace/model"
+            - "github.com/mozillazg/go-unidecode"
+            - "github.com/pocketbase"
+            # Tests use testify assertions.
+            - "github.com/stretchr/testify"
+
+        analytics_root:
+          files:
+            - "**/go/analytics/*.go"
+          allow:
+            - "$gostd"
+
+        analytics_heatmap:
+          files:
+            - "**/go/analytics/heatmap/**"
+          allow:
+            - "$gostd"
+            - "github.com/romayengineer/fme/go/analytics$"
+
+        analytics_source:
+          files:
+            - "**/go/analytics/source/**"
+          allow:
+            - "$gostd"
+            - "github.com/romayengineer/fme/go/analytics$"
+            - "github.com/romayengineer/fme/go/store/paths"
+
+        analytics_pipeline:
+          files:
+            - "**/go/analytics/pipeline/**"
+          allow:
+            - "$gostd"
+            - "github.com/romayengineer/fme/go/analytics$"
+            - "github.com/romayengineer/fme/go/analytics/heatmap$"
+            - "github.com/romayengineer/fme/go/analytics/source$"
+
+        browser_driver:
+          files:
+            - "**/go/browser/driver/**"
+          allow:
+            - "$gostd"
+            - "github.com/mxschmitt/playwright-go"
+
+        browser_session:
+          files:
+            - "**/go/browser/session/**"
+          allow:
+            - "$gostd"
+            - "github.com/mxschmitt/playwright-go"
+
+        browser_marketplace:
+          files:
+            - "**/go/browser/marketplace/**"
+          allow:
+            - "$gostd"
+            - "github.com/romayengineer/fme/go/browser/driver"
+            - "github.com/romayengineer/fme/go/core"
+            - "github.com/romayengineer/fme/go/marketplace/model"
+
+        browser_facebook:
+          files:
+            - "**/go/browser/facebook/**"
+          allow:
+            - "$gostd"
+            - "github.com/romayengineer/fme/go/browser/driver"
+            - "github.com/romayengineer/fme/go/browser/marketplace"
+            - "github.com/romayengineer/fme/go/browser/session"
+            - "github.com/romayengineer/fme/go/core"
+
+        capture:
+          files:
+            - "**/go/capture/**"
+          allow:
+            - "$gostd"
+            - "github.com/mxschmitt/playwright-go"
+            - "github.com/romayengineer/fme/go/browser/driver"
+            - "github.com/romayengineer/fme/go/core"
+            - "github.com/romayengineer/fme/go/marketplace/extract"
+
+        # Production code must not depend on Playwright directly: the browser
+        # module owns it. Tests may import it for type-only fakes.
+        app:
+          files:
+            - "**/go/app/**"
+            - "!$test"
+          allow:
+            - "$gostd"
+            - "github.com/joho/godotenv"
+            - "github.com/romayengineer/fme/go/browser"
+            - "github.com/romayengineer/fme/go/capture"
+            - "github.com/romayengineer/fme/go/core"
+            - "github.com/romayengineer/fme/go/marketplace/model"
+            - "github.com/romayengineer/fme/go/store"
+
+        app_tests:
+          files:
+            - "**/go/app/*_test.go"
+          allow:
+            - "$gostd"
+            - "github.com/joho/godotenv"
+            - "github.com/mxschmitt/playwright-go"
+            - "github.com/romayengineer/fme/go/browser"
+            - "github.com/romayengineer/fme/go/capture"
+            - "github.com/romayengineer/fme/go/core"
+            - "github.com/romayengineer/fme/go/marketplace/model"
+            - "github.com/romayengineer/fme/go/store"
+
+        cmd:
+          files:
+            - "**/go/cmd/fme/**"
+          allow:
+            - "$gostd"
+            - "github.com/romayengineer/fme/go/analytics"
+            - "github.com/romayengineer/fme/go/app"
+            - "github.com/romayengineer/fme/go/core"
+
+        # Test-only dependency used outside test files.
+        no_test_deps_in_prod:
+          files:
+            - "$all"
+            - "!$test"
+          deny:
+            - pkg: "github.com/stretchr/testify"
+              desc: "testify is a test dependency; use it only in _test.go files"
+
+        # Deprecated or superseded packages.
+        banned_packages:
+          files:
+            - "$all"
+          deny:
+            - pkg: "io/ioutil"
+              desc: "deprecated since Go 1.16; use os or io"
+            - pkg: "github.com/pkg/errors"
+              desc: "use the standard library errors package"
+            - pkg: "math/rand$"
+              desc: "use math/rand/v2"
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/romayengineer/fme

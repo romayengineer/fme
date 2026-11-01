@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOLANGCI_LINT_VERSION: v2.12.2
+  MODULES: >-
+    go/analytics go/core go/marketplace go/browser
+    go/store go/capture go/app go/cmd/fme
+
+jobs:
+  lint:
+    name: lint (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - go/analytics
+          - go/core
+          - go/marketplace
+          - go/browser
+          - go/store
+          - go/capture
+          - go/app
+          - go/cmd/fme
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache-dependency-path: go.work.sum
+      - uses: golangci-lint-action@v8
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          working-directory: ${{ matrix.module }}
+          args: ./...
+
+  format:
+    name: format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache-dependency-path: go.work.sum
+      - uses: golangci-lint-action@v8
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          install-only: true
+      - name: Check formatting
+        run: |
+          for m in $MODULES; do
+            echo "== $m"
+            (cd "$m" && golangci-lint fmt --diff ./...)
+          done
+
+  test:
+    name: test (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - go/analytics
+          - go/core
+          - go/marketplace
+          - go/browser
+          - go/store
+          - go/capture
+          - go/app
+          - go/cmd/fme
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache-dependency-path: go.work.sum
+      - name: Vet and test
+        working-directory: ${{ matrix.module }}
+        run: |
+          go vet ./...
+          go test -race ./...

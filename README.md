@@ -179,3 +179,23 @@ To add a CLI action:
 3. Add its flags in `go/cmd/fme/flags.go` and document it in the command table.
 4. Add a fake-based test in `go/app`; only add an integration test if the action
    needs a real browser or database.
+
+## Quality gates
+
+`golangci-lint` v2 is the single source of truth for Go style. The config lives in
+`.golangci.yml` at the repo root; every module under `go/` is linted with it.
+
+```bash
+just check        # fmt-check + vet + lint + test -race
+just lint         # all linters, no finding caps
+just fmt          # gofumpt + goimports
+just fmt-check    # fail if formatting is stale
+```
+
+- The linter set, complexity limits, and the per-package dependency allow-lists
+  in `depguard` are pinned. A new import of another `fme` package or a new
+  third-party dependency needs an explicit edit to `.golangci.yml`, which is the
+  review checkpoint for that dependency decision.
+- `//nolint:linter // reason` must name exactly one linter and explain why.
+  Blanket or stale suppressions fail the build through `nolintlint`.
+- CI runs the same gates on every push and pull request.

@@ -32,9 +32,13 @@ doctor:
 tidy:
     @for m in {{modules}}; do echo "tidy $m"; (cd "$m" && go mod tidy); done
 
-# Format Go source in every module
+# Format Go source in every module (gofumpt + goimports via golangci-lint)
 fmt:
-    @for m in {{modules}}; do (cd "$m" && go fmt ./...); done
+    @for m in {{modules}}; do (cd "$m" && golangci-lint fmt ./...); done
+
+# Fail if any Go source would be reformatted
+fmt-check:
+    @for m in {{modules}}; do (cd "$m" && golangci-lint fmt --diff ./...); done
 
 # Run the Go vet static analyzer in every module
 vet:
@@ -43,6 +47,9 @@ vet:
 # Run golangci-lint in every module
 lint:
     @for m in {{modules}}; do (cd "$m" && golangci-lint run ./...); done
+
+# Run every quality gate: formatting, vet, lint, and the race-enabled tests
+check: fmt-check vet lint test
 
 # Run the test suite in every module with the race detector
 test:

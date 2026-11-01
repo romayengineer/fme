@@ -1,6 +1,8 @@
 __pycache__
 .*
 !.env.example
+!.golangci.yml
+!.github/
 *.csv
 *.exe
 *.log
