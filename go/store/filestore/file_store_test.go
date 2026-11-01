@@ -5,9 +5,10 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/romayengineer/fme/go/marketplace/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/romayengineer/fme/go/marketplace/model"
 )
 
 func TestFileStoreGet(t *testing.T) {
@@ -61,9 +62,9 @@ func TestFileStoreSave(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, data)
 
-	assert.Equal(t, nil, data.ID)
-	assert.Equal(t, nil, data.Title)
-	assert.Equal(t, nil, data.Description)
+	assert.Nil(t, data.ID)
+	assert.Nil(t, data.Title)
+	assert.Nil(t, data.Description)
 
 	testData := model.MarketplaceItemDetails{
 		ID:          "123",

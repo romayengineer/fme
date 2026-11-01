@@ -124,15 +124,13 @@ func readAll(paths []string, workers int) ([]analytics.LocatedPoint, analytics.S
 
 	jobs := make(chan int)
 	var wg sync.WaitGroup
-	for w := 0; w < workers; w++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range workers {
+		wg.Go(func() {
 			for i := range jobs {
 				results[i] = readPoints(paths[i])
 				scanned[i] = true
 			}
-		}()
+		})
 	}
 	for i := range paths {
 		jobs <- i

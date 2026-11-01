@@ -4,8 +4,9 @@ import (
 	"testing"
 
 	"github.com/pocketbase/pocketbase"
-	"github.com/romayengineer/fme/go/marketplace/model"
 	"github.com/stretchr/testify/require"
+
+	"github.com/romayengineer/fme/go/marketplace/model"
 )
 
 func newTestDB(t *testing.T) *PocketBaseDB {

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -20,10 +21,10 @@ type GetDetailsOptions struct {
 // visit triggers the PDP response that capture persists.
 func (a *App) GetDetails(opts GetDetailsOptions) error {
 	if a.Sessions == nil {
-		return fmt.Errorf("get-details: session factory is not configured")
+		return errors.New("get-details: session factory is not configured")
 	}
 	if a.Details == nil {
-		return fmt.Errorf("get-details: detail store is not configured")
+		return errors.New("get-details: detail store is not configured")
 	}
 
 	delay := opts.Delay

@@ -3,10 +3,12 @@ package capture
 import (
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 
 	"github.com/mxschmitt/playwright-go"
+
 	"github.com/romayengineer/fme/go/browser/driver"
 	"github.com/romayengineer/fme/go/core/jsonutil"
 	"github.com/romayengineer/fme/go/core/logging"
@@ -189,13 +191,7 @@ func (ceh *ContextEventHandlers) handleResponse(resp playwright.Response) {
 	}
 
 	if shouldSkipRequest.friendlyName == "MarketplacePDPContainerQuery" {
-		rateLimited := false
-		for _, jsonData := range jsonDatas {
-			if extract.IsErrorRateLimit(jsonData) {
-				rateLimited = true
-				break
-			}
-		}
+		rateLimited := slices.ContainsFunc(jsonDatas, extract.IsErrorRateLimit)
 
 		if rateLimited {
 			// Do not persist a rate-limit error as if it were a listing response:

@@ -93,7 +93,6 @@ func ProcessData(StartTimeToProcess int64) (int64, error) {
 		filesDeletedCounter += 1
 
 		return true
-
 	}, true)
 
 	lastTimestamp, _ = GetTimestamp(lastFilePath)
@@ -148,7 +147,7 @@ func WriteJsonResponseById(jsonDatas []any, friendlyName string, id string) (int
 
 func WriteJsonFileDeterministic(prefix string, friendlyName string, key string, jsonData any) error {
 	filename := paths.ResponseFileByID(friendlyName, prefix, key)
-	return jsonstore.WriteJSONFile(filename, jsonData, 0644)
+	return jsonstore.WriteJSONFile(filename, jsonData, 0o644)
 }
 
 // WriteFileAndDirs writes data atomically, creating parent directories.
@@ -170,7 +169,7 @@ func WriteRandomJsonFile(prefix string, friendly_name string, body []byte) error
 
 	filename := paths.ResponseFile(friendly_name, prefix, timestamp, random)
 
-	return WriteFileAndDirs(filename, body, 0644)
+	return WriteFileAndDirs(filename, body, 0o644)
 }
 
 func WriteRandomJsonFileIndented(prefix string, friendly_name string, jsonData any) error {
@@ -182,7 +181,6 @@ func WriteRandomJsonFileIndented(prefix string, friendly_name string, jsonData a
 }
 
 func GetFilePaths(prefix string, sortit bool) ([]string, error) {
-
 	filePaths := []string{}
 
 	err := filepath.WalkDir(DataDir, func(path string, d fs.DirEntry, err error) error {
@@ -209,7 +207,6 @@ func GetFilePaths(prefix string, sortit bool) ([]string, error) {
 
 		return nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("walk %s: %w", DataDir, err)
 	}

@@ -2,6 +2,7 @@ package session
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 
@@ -28,7 +29,7 @@ func (FileStore) Delete() error                             { return DeleteSessi
 // live Facebook session credentials, so it is readable only by the current user.
 func SaveSession(storageState *playwright.StorageState) error {
 	if storageState == nil {
-		return fmt.Errorf("storage state is nil")
+		return errors.New("storage state is nil")
 	}
 
 	data, err := json.MarshalIndent(storageState, "", "  ")
@@ -36,7 +37,7 @@ func SaveSession(storageState *playwright.StorageState) error {
 		return fmt.Errorf("marshal storage state: %w", err)
 	}
 
-	if err := os.WriteFile(sessionFilePath, data, 0600); err != nil {
+	if err := os.WriteFile(sessionFilePath, data, 0o600); err != nil {
 		return fmt.Errorf("write session file: %w", err)
 	}
 

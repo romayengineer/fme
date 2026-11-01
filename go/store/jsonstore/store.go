@@ -88,7 +88,7 @@ func (pfs *fileStoreImpl[T]) Save(data T) (*T, error) {
 	}
 
 	filePath := filepath.Join(pfs.fileDir, pfs.fileName)
-	if err := WriteJSONFile(filePath, pfs.data, 0644); err != nil {
+	if err := WriteJSONFile(filePath, pfs.data, 0o644); err != nil {
 		return nil, err
 	}
 
@@ -107,7 +107,7 @@ func WriteJSONFile(path string, v any, perm os.FileMode) error {
 // WriteFileAndDirs creates the parent directory and writes data atomically.
 func WriteFileAndDirs(name string, data []byte, perm os.FileMode) error {
 	nameDir := filepath.Dir(name)
-	if err := os.MkdirAll(nameDir, 0755); err != nil {
+	if err := os.MkdirAll(nameDir, 0o755); err != nil {
 		return err
 	}
 	return writeFileAtomic(name, data, perm)

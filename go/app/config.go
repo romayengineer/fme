@@ -1,12 +1,14 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"runtime"
 	"strconv"
 
 	"github.com/joho/godotenv"
+
 	"github.com/romayengineer/fme/go/browser/facebook"
 	"github.com/romayengineer/fme/go/core/logging"
 )
@@ -38,7 +40,7 @@ func LoadConfig() (*Config, error) {
 	headless := headlessFromEnv()
 
 	if userDataDir == "" && (username == "" || password == "") {
-		return nil, fmt.Errorf("set FME_USER_DATA_DIR or FME_USERNAME/FME_PASSWORD in .env")
+		return nil, errors.New("set FME_USER_DATA_DIR or FME_USERNAME/FME_PASSWORD in .env")
 	}
 
 	if userDataDir != "" && browserChannel == "" {
@@ -112,7 +114,7 @@ func displayForHeadedChrome() string {
 
 // runningXDisplay returns ":N" for the lowest responsive X socket, or "".
 func runningXDisplay() string {
-	for n := 0; n <= 9; n++ {
+	for n := range 10 {
 		display := fmt.Sprintf(":%d", n)
 		if _, err := os.Stat("/tmp/.X11-unix/X" + strconv.Itoa(n)); err == nil {
 			return display

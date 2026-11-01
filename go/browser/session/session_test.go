@@ -24,7 +24,7 @@ func TestSaveLoadSessionRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat session file: %v", err)
 	}
-	if got := info.Mode().Perm(); got != 0600 {
+	if got := info.Mode().Perm(); got != 0o600 {
 		t.Fatalf("session file mode = %o, want 600", got)
 	}
 
@@ -55,7 +55,7 @@ func TestLoadSessionMissingFile(t *testing.T) {
 func TestLoadSessionCorruptFile(t *testing.T) {
 	t.Chdir(t.TempDir())
 
-	if err := os.WriteFile(sessionFilePath, []byte("not json"), 0600); err != nil {
+	if err := os.WriteFile(sessionFilePath, []byte("not json"), 0o600); err != nil {
 		t.Fatalf("write corrupt session: %v", err)
 	}
 

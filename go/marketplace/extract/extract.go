@@ -2,7 +2,7 @@
 package extract
 
 import (
-	"fmt"
+	"errors"
 	"strings"
 
 	"github.com/romayengineer/fme/go/core/jsonutil"
@@ -172,12 +172,12 @@ func GetLocationAttrs(location any) model.Location {
 func ProductDetailsGet(data any) ([]model.MarketplaceItemDetails, error) {
 	detail := jsonutil.GetKey(data, "data.viewer.marketplace_product_details_page")
 	if detail == nil {
-		return nil, fmt.Errorf("detail not found")
+		return nil, errors.New("detail not found")
 	}
 
 	productID, ok := jsonutil.GetKey(detail, "target.id").(string)
 	if !ok || productID == "" {
-		return nil, fmt.Errorf("detail does not have a valid id")
+		return nil, errors.New("detail does not have a valid id")
 	}
 
 	var products []model.MarketplaceItemDetails
@@ -288,12 +288,12 @@ func GetPhotosURI(photos any) any {
 func ProductsFromSearchGet(data any) ([]model.MarketplaceItemDetails, error) {
 	edges := jsonutil.GetKey(data, "data.marketplace_search.feed_units.edges")
 	if edges == nil {
-		return nil, fmt.Errorf("no marketplace search found")
+		return nil, errors.New("no marketplace search found")
 	}
 
 	edgesList, ok := edges.([]any)
 	if !ok {
-		return nil, fmt.Errorf("edges is not a list")
+		return nil, errors.New("edges is not a list")
 	}
 
 	var products []model.MarketplaceItemDetails
@@ -365,12 +365,12 @@ func ProducFromDataValid(data any) bool {
 func ProducFromDataGet(data any) ([]model.MarketplaceItemDetails, error) {
 	node := jsonutil.GetKey(data, "data.node")
 	if node == nil {
-		return nil, fmt.Errorf("data node not found")
+		return nil, errors.New("data node not found")
 	}
 
 	productID, ok := jsonutil.GetKey(node, "entity_id").(string)
 	if !ok || productID == "" {
-		return nil, fmt.Errorf("product does not have a valid id")
+		return nil, errors.New("product does not have a valid id")
 	}
 
 	var products []model.MarketplaceItemDetails

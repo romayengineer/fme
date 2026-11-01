@@ -91,7 +91,7 @@ func (pl *Pages) isLoggedIn() bool {
 }
 
 func (pl *Pages) WaitForHomePage(timeoutSeconds int) bool {
-	for i := 0; i < timeoutSeconds; i++ {
+	for range timeoutSeconds {
 		if pl.isLoggedIn() {
 			return true
 		}

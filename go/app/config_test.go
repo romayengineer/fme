@@ -14,7 +14,7 @@ func unsetEnv(t *testing.T, keys ...string) {
 		if err := os.Unsetenv(key); err != nil {
 			t.Fatalf("unset %s: %v", key, err)
 		}
-		key := key
+
 		t.Cleanup(func() {
 			if existed {
 				_ = os.Setenv(key, old)
@@ -30,7 +30,7 @@ func TestLoadConfigWithPersistentProfile(t *testing.T) {
 	unsetEnv(t, "FME_USER_DATA_DIR", "FME_USERNAME", "FME_PASSWORD", "FME_BROWSER_CHANNEL", "FME_PROFILE_DIRECTORY")
 
 	env := "FME_USER_DATA_DIR=/tmp/fme-profile\nFME_PROFILE_DIRECTORY=Profile 1\n"
-	if err := os.WriteFile(".env", []byte(env), 0600); err != nil {
+	if err := os.WriteFile(".env", []byte(env), 0o600); err != nil {
 		t.Fatalf("write .env: %v", err)
 	}
 
@@ -54,7 +54,7 @@ func TestLoadConfigWithCredentials(t *testing.T) {
 	unsetEnv(t, "FME_USER_DATA_DIR", "FME_USERNAME", "FME_PASSWORD", "FME_BROWSER_CHANNEL", "FME_PROFILE_DIRECTORY")
 
 	env := "FME_USERNAME=user@example.com\nFME_PASSWORD=secret\n"
-	if err := os.WriteFile(".env", []byte(env), 0600); err != nil {
+	if err := os.WriteFile(".env", []byte(env), 0o600); err != nil {
 		t.Fatalf("write .env: %v", err)
 	}
 
@@ -74,7 +74,7 @@ func TestLoadConfigRequiresCredentialsOrProfile(t *testing.T) {
 	t.Chdir(t.TempDir())
 	unsetEnv(t, "FME_USER_DATA_DIR", "FME_USERNAME", "FME_PASSWORD")
 
-	if err := os.WriteFile(".env", nil, 0600); err != nil {
+	if err := os.WriteFile(".env", nil, 0o600); err != nil {
 		t.Fatalf("write .env: %v", err)
 	}
 

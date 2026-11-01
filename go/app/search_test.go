@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/mxschmitt/playwright-go"
+
 	"github.com/romayengineer/fme/go/browser/driver"
 )
 
@@ -35,6 +36,7 @@ func (p *fakePage) Close() error                                  { return nil }
 func (p *fakePage) GetByRole(playwright.AriaRole) driver.LocatorWrapperInterface {
 	return &fakeLocator{}
 }
+
 func (p *fakePage) Evaluate(string, ...any) (any, error) {
 	if p.body != "" {
 		return p.body, nil
@@ -93,6 +95,7 @@ func (d *fakeDetails) ProcessResponses(int64) (int64, error) {
 	d.processed++
 	return 0, d.err
 }
+
 func (d *fakeDetails) ForEachDetail(process func(string, map[string]any) bool, _ bool) (int, error) {
 	for i, detail := range d.details {
 		if !process("detail_"+string(rune('0'+i))+".json", detail) {
@@ -101,12 +104,14 @@ func (d *fakeDetails) ForEachDetail(process func(string, map[string]any) bool, _
 	}
 	return len(d.details), nil
 }
+
 func (d *fakeDetails) LoadPDPProductIDs() map[string]struct{} {
 	if d.pdpIDs == nil {
 		return map[string]struct{}{}
 	}
 	return d.pdpIDs
 }
+
 func (d *fakeDetails) PendingDescriptions(map[string]struct{}, map[string]struct{}) (int, int, int, error) {
 	return d.pending, 0, 0, nil
 }
@@ -128,14 +133,17 @@ func (s *fakeResponseSink) SaveResponse([]any, string) (int, error) {
 	s.responses++
 	return 1, nil
 }
+
 func (s *fakeResponseSink) SaveResponseByID([]any, string, string) (int, error) {
 	s.byID++
 	return 1, nil
 }
+
 func (s *fakeResponseSink) MergeProducts([]any) int {
 	s.mergeCalls++
 	return s.mergeCount
 }
+
 func (s *fakeResponseSink) WriteDebugMiss(string, []byte) error {
 	s.debugMiss++
 	return nil

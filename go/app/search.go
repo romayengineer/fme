@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/romayengineer/fme/go/browser/marketplace"
@@ -65,7 +66,7 @@ type SearchOptions struct {
 // still processing whatever responses were captured.
 func (a *App) Search(opts SearchOptions) error {
 	if a.Sessions == nil {
-		return fmt.Errorf("search: session factory is not configured")
+		return errors.New("search: session factory is not configured")
 	}
 
 	session, err := a.Sessions.Open()
@@ -103,7 +104,7 @@ func (a *App) Search(opts SearchOptions) error {
 	}
 
 	if a.Details == nil {
-		return fmt.Errorf("search: detail store is not configured")
+		return errors.New("search: detail store is not configured")
 	}
 	if _, err := a.Details.ProcessResponses(0); err != nil {
 		a.Logger.Error("search: process responses", "error", err)

@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/mxschmitt/playwright-go"
@@ -16,9 +17,11 @@ type LocatorWrapperInterface interface {
 	All() ([]LocatorWrapperInterface, error)
 }
 
-type RouteHandler func(playwright.Route)
-type ResponseHandler func(playwright.Response)
-type RequestHandler func(playwright.Request)
+type (
+	RouteHandler    func(playwright.Route)
+	ResponseHandler func(playwright.Response)
+	RequestHandler  func(playwright.Request)
+)
 
 type ContextWrapperInterface interface {
 	NewPage() (PageWrapperInterface, error)
@@ -149,7 +152,7 @@ func (pw *PageWrapper) GetByRole(role playwright.AriaRole) LocatorWrapperInterfa
 func (pw *PageWrapper) Goto(url string) error {
 	_, err := pw.Page.Goto(url)
 	if err != nil {
-		return fmt.Errorf("could not goto %s: %v", url, err)
+		return fmt.Errorf("could not goto %s: %w", url, err)
 	}
 	return nil
 }
@@ -261,7 +264,7 @@ func (pw *PlaywrightWrapper) Stop() error {
 
 func (pw *PlaywrightWrapper) Run() error {
 	if pw.Playwright != nil {
-		return fmt.Errorf("playwright already running")
+		return errors.New("playwright already running")
 	}
 
 	// Install only Chromium browser
@@ -294,7 +297,7 @@ func (pw *PlaywrightWrapper) LaunchPersistentContext(userDataDir string, channel
 		opts.Channel = playwright.String(channel)
 	}
 	if profileDirectory != "" {
-		opts.Args = append(opts.Args, fmt.Sprintf("--profile-directory=%s", profileDirectory))
+		opts.Args = append(opts.Args, "--profile-directory="+profileDirectory)
 	}
 	context, err := pw.Playwright.Chromium.LaunchPersistentContext(userDataDir, opts)
 	if err != nil {

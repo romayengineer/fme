@@ -119,9 +119,9 @@ func ClearPDPFailure(productId string) {
 // dead-listing payload can be inspected later (data/.../debug/miss_<id>.json).
 func WriteDebugMiss(productId string, body []byte) error {
 	path := filepath.Join(paths.PDPDebugDir(), "miss_"+productId+".json")
-	return jsonstore.WriteFileAndDirs(path, body, 0644)
+	return jsonstore.WriteFileAndDirs(path, body, 0o644)
 }
 
 func writePDPState(name string, v any) error {
-	return jsonstore.WriteJSONFile(filepath.Join(pdpDir(), name), v, 0644)
+	return jsonstore.WriteJSONFile(filepath.Join(pdpDir(), name), v, 0o644)
 }

@@ -1,6 +1,7 @@
 package db
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"github.com/pocketbase/pocketbase/migrations"
 	"github.com/pocketbase/pocketbase/migrations/logs"
 	"github.com/pocketbase/pocketbase/tools/migrate"
+
 	"github.com/romayengineer/fme/go/core/logging"
 )
 
@@ -19,8 +21,10 @@ type PocketBaseDB struct {
 	mu  sync.Mutex
 }
 
-var dbInstance *PocketBaseDB
-var dbOnce sync.Once
+var (
+	dbInstance *PocketBaseDB
+	dbOnce     sync.Once
+)
 
 func GetPocketBaseDB() (*PocketBaseDB, error) {
 	var err error
@@ -53,13 +57,13 @@ func dataDir() string {
 
 func (db *PocketBaseDB) Start() error {
 	if db.app == nil {
-		return fmt.Errorf("pocketbase app not initialized")
+		return errors.New("pocketbase app not initialized")
 	}
 
 	// Bootstrap creates the database tables if they don't exist
 	if err := db.app.Bootstrap(); err != nil {
 		logging.LogError0("Start", "bootstrap failed", "error", err)
-		return fmt.Errorf("failed to bootstrap pocketbase: %v", err)
+		return fmt.Errorf("failed to bootstrap pocketbase: %w", err)
 	}
 
 	// Bootstrap only opens the databases; the built-in migrations (which create
@@ -68,13 +72,13 @@ func (db *PocketBaseDB) Start() error {
 	// `just serve` first. Runner.Up is idempotent, so this is safe on every start.
 	if err := db.runMigrations(); err != nil {
 		logging.LogError0("Start", "migrations failed", "error", err)
-		return fmt.Errorf("failed to run pocketbase migrations: %v", err)
+		return fmt.Errorf("failed to run pocketbase migrations: %w", err)
 	}
 
 	// Ensure products collection exists
 	if err := db.ensureProductsCollection(); err != nil {
 		logging.LogError0("Start", "failed to ensure products collection", "error", err)
-		return fmt.Errorf("failed to ensure products collection: %v", err)
+		return fmt.Errorf("failed to ensure products collection: %w", err)
 	}
 
 	logging.LogInfo0("Start", "database initialized successfully")

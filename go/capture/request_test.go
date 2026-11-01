@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/mxschmitt/playwright-go"
+
 	"github.com/romayengineer/fme/go/browser/driver"
 	"github.com/romayengineer/fme/go/core/orderedmap"
 )
@@ -35,15 +36,18 @@ func (s *fakeSink) SaveResponse([]any, string) (int, error) {
 	s.responses++
 	return 1, nil
 }
+
 func (s *fakeSink) SaveResponseByID(_ []any, _ string, id string) (int, error) {
 	s.byID++
 	s.lastID = id
 	return 1, nil
 }
+
 func (s *fakeSink) MergeProducts([]any) int {
 	s.mergeCalls++
 	return s.mergeResult
 }
+
 func (s *fakeSink) WriteDebugMiss(string, []byte) error {
 	s.debugMisses++
 	return nil

@@ -9,6 +9,7 @@ import (
 
 	"github.com/mozillazg/go-unidecode"
 	"github.com/pocketbase/pocketbase/models"
+
 	"github.com/romayengineer/fme/go/core/logging"
 	"github.com/romayengineer/fme/go/marketplace/model"
 )
@@ -18,7 +19,7 @@ var ErrNotFound = errors.New("product not found")
 
 func SetProductFields(record *models.Record, product model.MarketplaceItemDetails) error {
 	if record == nil {
-		return fmt.Errorf("record is nil")
+		return errors.New("record is nil")
 	}
 
 	priceAmount, err := toFloat(product.PriceAmount)
@@ -115,7 +116,7 @@ func (db *PocketBaseDB) UpsertProduct(product model.MarketplaceItemDetails) (sql
 		is_pending = excluded.is_pending,
 		is_sold = excluded.is_sold`
 
-	result, err := db.app.Dao().DB().NewQuery(sql).Bind(map[string]interface{}{
+	result, err := db.app.Dao().DB().NewQuery(sql).Bind(map[string]any{
 		"facebook_id":         facebookID,
 		"facebook_id_long":    toString(product.IDLong),
 		"title":               toStringClean(product.Title),
@@ -138,7 +139,6 @@ func (db *PocketBaseDB) UpsertProduct(product model.MarketplaceItemDetails) (sql
 		"is_pending":          toBool(product.IsPending),
 		"is_sold":             toBool(product.IsSold),
 	}).Execute()
-
 	if err != nil {
 		logging.LogError0("SaveProduct", "failed to upsert product", "facebook_id", facebookID, "error", err)
 		return result, err
@@ -148,17 +148,15 @@ func (db *PocketBaseDB) UpsertProduct(product model.MarketplaceItemDetails) (sql
 }
 
 func (db *PocketBaseDB) GetProductID(product model.MarketplaceItemDetails) (string, error) {
-
 	facebookID := toString(product.ID)
 
 	var result struct {
 		ID string
 	}
 
-	err := db.app.Dao().DB().NewQuery("SELECT id FROM products WHERE facebook_id = {:facebook_id} LIMIT 1").Bind(map[string]interface{}{
+	err := db.app.Dao().DB().NewQuery("SELECT id FROM products WHERE facebook_id = {:facebook_id} LIMIT 1").Bind(map[string]any{
 		"facebook_id": facebookID,
 	}).One(&result)
-
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", ErrNotFound

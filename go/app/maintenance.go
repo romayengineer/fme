@@ -1,6 +1,6 @@
 package app
 
-import "fmt"
+import "errors"
 
 // DescriptionStats summarizes how many detail records have a description.
 type DescriptionStats struct {
@@ -26,7 +26,7 @@ func (s DescriptionStats) UnavailablePercent() float64 { return percent(s.Unavai
 // ProcessResponses materializes captured responses into data/__Details.
 func (a *App) ProcessResponses() error {
 	if a.Details == nil {
-		return fmt.Errorf("process-data: detail store is not configured")
+		return errors.New("process-data: detail store is not configured")
 	}
 	_, err := a.Details.ProcessResponses(0)
 	return err
@@ -42,7 +42,7 @@ func (a *App) DedupePDP() {
 // FillEmpty backfills missing URLs on existing detail files.
 func (a *App) FillEmpty() error {
 	if a.Details == nil {
-		return fmt.Errorf("fill-empty: detail store is not configured")
+		return errors.New("fill-empty: detail store is not configured")
 	}
 	return a.Details.FillEmpty()
 }
@@ -50,7 +50,7 @@ func (a *App) FillEmpty() error {
 // DescriptionStats reports description coverage for data/__Details.
 func (a *App) DescriptionStats() (DescriptionStats, error) {
 	if a.Details == nil {
-		return DescriptionStats{}, fmt.Errorf("description-stats: detail store is not configured")
+		return DescriptionStats{}, errors.New("description-stats: detail store is not configured")
 	}
 	return a.Details.DescriptionStats()
 }

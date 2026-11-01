@@ -15,7 +15,7 @@ func TestSaveProductsFromMergesDescription(t *testing.T) {
 	t.Chdir(tmpDir)
 
 	detailDir := filepath.Join(DataDir, "__Details")
-	if err := os.MkdirAll(detailDir, 0755); err != nil {
+	if err := os.MkdirAll(detailDir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 
@@ -24,7 +24,7 @@ func TestSaveProductsFromMergesDescription(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal existing: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(detailDir, "detail_123.json"), body, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(detailDir, "detail_123.json"), body, 0o644); err != nil {
 		t.Fatalf("write existing: %v", err)
 	}
 
@@ -76,7 +76,7 @@ func TestDetailMergePreservesPersistedKeysAndFilename(t *testing.T) {
 	t.Chdir(tmpDir)
 
 	detailDir := filepath.Join(DataDir, "__Details")
-	if err := os.MkdirAll(detailDir, 0755); err != nil {
+	if err := os.MkdirAll(detailDir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 
@@ -95,7 +95,7 @@ func TestDetailMergePreservesPersistedKeysAndFilename(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal fixture: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(detailDir, "detail_123.json"), body, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(detailDir, "detail_123.json"), body, 0o644); err != nil {
 		t.Fatalf("write fixture: %v", err)
 	}
 
@@ -143,7 +143,7 @@ func TestWriteFileAndDirsWritesAtomically(t *testing.T) {
 	tmpDir := t.TempDir()
 	name := filepath.Join(tmpDir, "nested", "detail_1.json")
 
-	if err := WriteFileAndDirs(name, []byte(`{"first":true}`), 0600); err != nil {
+	if err := WriteFileAndDirs(name, []byte(`{"first":true}`), 0o600); err != nil {
 		t.Fatalf("first write: %v", err)
 	}
 
@@ -151,11 +151,11 @@ func TestWriteFileAndDirsWritesAtomically(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat: %v", err)
 	}
-	if got := info.Mode().Perm(); got != 0600 {
+	if got := info.Mode().Perm(); got != 0o600 {
 		t.Errorf("mode = %o, want 600", got)
 	}
 
-	if err := WriteFileAndDirs(name, []byte(`{"second":true}`), 0644); err != nil {
+	if err := WriteFileAndDirs(name, []byte(`{"second":true}`), 0o644); err != nil {
 		t.Fatalf("second write: %v", err)
 	}
 

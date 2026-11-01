@@ -1,6 +1,7 @@
 package facebook
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/romayengineer/fme/go/browser/driver"
@@ -184,7 +185,7 @@ func (fs *FacebookScrapper) loginWithCredentials(userCredentials UserCredentials
 	}
 	fmt.Println("Waiting for login to complete (solve any captcha in the browser)...")
 	if !pageHelpers.WaitForHomePage(600) {
-		return nil, fmt.Errorf("not in home page")
+		return nil, errors.New("not in home page")
 	}
 
 	storageState, err := ctx.StorageState()

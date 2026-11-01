@@ -1,10 +1,13 @@
 package capture
 
 import (
+	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/mxschmitt/playwright-go"
+
 	"github.com/romayengineer/fme/go/browser/driver"
 	"github.com/romayengineer/fme/go/core/jsonutil"
 	"github.com/romayengineer/fme/go/core/logging"
@@ -12,13 +15,10 @@ import (
 )
 
 func GetHeaders(request playwright.Request, simple bool) (map[string]string, error) {
-
 	headers := map[string]string{}
 
 	if simple {
-
 		headers = request.Headers()
-
 	} else {
 
 		headersDirty, err := request.AllHeaders()
@@ -129,7 +129,7 @@ type PDPOutcome struct {
 // APIRequestContext), even though the body and headers are identical.
 func FetchPDP(page driver.PageWrapperInterface, template *PDPTemplate, productId string, sink Sink) (PDPOutcome, error) {
 	if sink == nil {
-		return PDPOutcome{}, fmt.Errorf("response sink is not configured")
+		return PDPOutcome{}, errors.New("response sink is not configured")
 	}
 
 	postDataMap := template.PostDataMap.Clone()
@@ -176,10 +176,8 @@ func FetchPDP(page driver.PageWrapperInterface, template *PDPTemplate, productId
 		return PDPOutcome{}, fmt.Errorf("error ExtractJsonFromBody: %w", err)
 	}
 
-	for _, jsonData := range jsonDatas {
-		if extract.IsErrorRateLimit(jsonData) {
-			return PDPOutcome{RateLimited: true}, nil
-		}
+	if slices.ContainsFunc(jsonDatas, extract.IsErrorRateLimit) {
+		return PDPOutcome{RateLimited: true}, nil
 	}
 
 	// A PDP container with no listing inside means the item was removed. Do not

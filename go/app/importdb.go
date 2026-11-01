@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -12,7 +13,7 @@ import (
 // products written and the first error that stopped the pass.
 func (a *App) ImportDB() (int64, error) {
 	if a.Details == nil {
-		return 0, fmt.Errorf("save: detail store is not configured")
+		return 0, errors.New("save: detail store is not configured")
 	}
 
 	database, err := db.GetPocketBaseDB()

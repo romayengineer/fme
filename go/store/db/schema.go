@@ -5,6 +5,7 @@ import (
 
 	"github.com/pocketbase/pocketbase/models"
 	"github.com/pocketbase/pocketbase/models/schema"
+
 	"github.com/romayengineer/fme/go/core/logging"
 )
 
@@ -67,7 +68,7 @@ func (db *PocketBaseDB) ensureProductsCollection() error {
 
 	// Save the collection to database
 	if err := db.app.Dao().SaveCollection(collection); err != nil {
-		return fmt.Errorf("failed to create products collection: %v", err)
+		return fmt.Errorf("failed to create products collection: %w", err)
 	}
 
 	logging.LogInfo0("ensureProductsCollection", "products collection created successfully")

@@ -1,8 +1,8 @@
 package main
 
 import (
+	"errors"
 	"flag"
-	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -58,7 +58,7 @@ func NewFlags() (Flags, error) {
 	})
 
 	if strings.ToLower(*action) == "search" && *keywords == "" {
-		return Flags{}, fmt.Errorf("-keywords is required when -action=search")
+		return Flags{}, errors.New("-keywords is required when -action=search")
 	}
 
 	var level slog.Level

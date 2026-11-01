@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
 	"time"
@@ -25,13 +26,13 @@ type PullDescriptionsOptions struct {
 // template, then replays that request for the remaining listings.
 func (a *App) PullDescriptions(opts PullDescriptionsOptions) error {
 	if a.Details == nil {
-		return fmt.Errorf("pull-description: detail store is not configured")
+		return errors.New("pull-description: detail store is not configured")
 	}
 	if a.Sessions == nil {
-		return fmt.Errorf("pull-description: session factory is not configured")
+		return errors.New("pull-description: session factory is not configured")
 	}
 	if a.Sink == nil {
-		return fmt.Errorf("pull-description: response sink is not configured")
+		return errors.New("pull-description: response sink is not configured")
 	}
 
 	var runErr error
@@ -93,7 +94,7 @@ func (a *App) PullDescriptions(opts PullDescriptionsOptions) error {
 	fmt.Println("Opening a listing to capture the PDP request template...")
 	template := a.capturePDPTemplate(pageHelpers, page)
 	if template == nil {
-		return fmt.Errorf("pull-description: did not capture the PDP request template: Facebook is likely throttling this session (error 1675004); wait and retry later")
+		return errors.New("pull-description: did not capture the PDP request template: Facebook is likely throttling this session (error 1675004); wait and retry later")
 	}
 
 	pulled := 0
@@ -252,7 +253,7 @@ type pdpPage interface {
 
 func (a *App) capturePDPTemplate(pageHelpers pdpPage, page driver.PageWrapperInterface) *capture.PDPTemplate {
 	const maxAttempts = 6
-	for attempt := 0; attempt < maxAttempts; attempt++ {
+	for attempt := range maxAttempts {
 		if attempt > 0 {
 			if err := pageHelpers.MarketplaceHome(); err != nil {
 				a.Logger.Warn("pull-description: could not return to marketplace", "attempt", attempt, "error", err)

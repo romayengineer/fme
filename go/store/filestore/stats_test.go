@@ -16,7 +16,7 @@ func writeDetail(t *testing.T, dir string, id string, description any) {
 	if err != nil {
 		t.Fatalf("marshal fixture: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "detail_"+id+".json"), body, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "detail_"+id+".json"), body, 0o644); err != nil {
 		t.Fatalf("write fixture: %v", err)
 	}
 }
@@ -26,7 +26,7 @@ func TestComputeDescriptionStats(t *testing.T) {
 	t.Chdir(tmpDir)
 
 	detailDir := filepath.Join(DataDir, "__Details")
-	if err := os.MkdirAll(detailDir, 0755); err != nil {
+	if err := os.MkdirAll(detailDir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 
@@ -62,7 +62,7 @@ func TestComputeDescriptionStatsUnavailable(t *testing.T) {
 	t.Chdir(tmpDir)
 
 	detailDir := filepath.Join(DataDir, "__Details")
-	if err := os.MkdirAll(detailDir, 0755); err != nil {
+	if err := os.MkdirAll(detailDir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 
@@ -97,7 +97,7 @@ func TestPendingDescriptionCount(t *testing.T) {
 	t.Chdir(tmpDir)
 
 	detailDir := filepath.Join(DataDir, "__Details")
-	if err := os.MkdirAll(detailDir, 0755); err != nil {
+	if err := os.MkdirAll(detailDir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 
@@ -124,7 +124,7 @@ func TestComputeDescriptionStatsEmpty(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Chdir(tmpDir)
 
-	if err := os.MkdirAll(filepath.Join(DataDir, "__Details"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(DataDir, "__Details"), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 
