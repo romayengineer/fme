@@ -94,15 +94,15 @@ func run() error {
 		return fmt.Errorf("unknown action %q", flags.action)
 	}
 
-	application := newApplication(action)
+	application := newApplication(action, flags)
 	return runner(application, flags)
 }
 
-func newApplication(action string) *app.App {
+func newApplication(action string, flags Flags) *app.App {
 	sink := app.NewFileResponseSink()
 
 	return app.New(app.Deps{
-		Sessions: app.NewSessionFactory(blockImagesFor(action), sink),
+		Sessions: app.NewSessionFactory(blockImagesFor(action), sink, flags.headless),
 		Details:  app.NewFileDetailStore(),
 		PDPState: app.NewFilePDPState(),
 		Sink:     sink,

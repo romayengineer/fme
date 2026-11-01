@@ -43,7 +43,7 @@ func TestBlockImagesFor(t *testing.T) {
 }
 
 func TestNewApplicationIsWired(t *testing.T) {
-	application := newApplication("search")
+	application := newApplication("search", Flags{})
 	if application == nil {
 		t.Fatal("newApplication returned nil")
 	}

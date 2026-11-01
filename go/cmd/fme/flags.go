@@ -25,6 +25,7 @@ type Flags struct {
 	listMaps                bool
 	minRepeat               int
 	retryUnavailable        bool
+	headless                *bool
 }
 
 func NewFlags() (Flags, error) {
@@ -44,7 +45,17 @@ func NewFlags() (Flags, error) {
 	listMaps := flag.Bool("list-maps", false, "List available heat map renderers and exit")
 	minRepeat := flag.Int("min-repeat", 5, "Heat map: drop coordinates repeated >= N times within one city (action=heatmap; 0 disables)")
 	retryUnavailable := flag.Bool("retry-unavailable", false, "pull_description: retry listings previously marked as no longer existing")
+	headless := flag.Bool("headless", false, "Launch Chromium without a window; default is headed when a display is available (also FME_HEADLESS)")
 	flag.Parse()
+
+	// A plain bool cannot distinguish "-headless=false" from an absent flag, so
+	// only pass an override when the flag was actually given.
+	var headlessOverride *bool
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "headless" {
+			headlessOverride = headless
+		}
+	})
 
 	if strings.ToLower(*action) == "search" && *keywords == "" {
 		return Flags{}, fmt.Errorf("-keywords is required when -action=search")
@@ -85,5 +96,6 @@ func NewFlags() (Flags, error) {
 		listMaps:                *listMaps,
 		minRepeat:               *minRepeat,
 		retryUnavailable:        *retryUnavailable,
+		headless:                headlessOverride,
 	}, nil
 }

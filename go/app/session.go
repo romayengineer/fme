@@ -6,6 +6,7 @@ import (
 	"github.com/romayengineer/fme/go/browser/driver"
 	"github.com/romayengineer/fme/go/browser/facebook"
 	"github.com/romayengineer/fme/go/capture"
+	"github.com/romayengineer/fme/go/core/logging"
 )
 
 // Session is one authenticated browser context plus the capture handlers that
@@ -26,13 +27,17 @@ type Waiter interface {
 type BrowserSessionFactory struct {
 	BlockImages bool
 	Sink        capture.Sink
+	// Headless overrides the browser mode when non-nil (from -headless).
+	Headless *bool
 }
 
 // NewSessionFactory returns a factory that configures the browser for the
-// current action. The .env file is read lazily in Open, so actions such as
-// install_drivers work before credentials are configured.
-func NewSessionFactory(blockImages bool, sink capture.Sink) *BrowserSessionFactory {
-	return &BrowserSessionFactory{BlockImages: blockImages, Sink: sink}
+// current action. headless is the -headless override, or nil to let
+// FME_HEADLESS and the available display decide. The .env file is read lazily
+// in Open, so actions such as install_drivers work before credentials are
+// configured.
+func NewSessionFactory(blockImages bool, sink capture.Sink, headless *bool) *BrowserSessionFactory {
+	return &BrowserSessionFactory{BlockImages: blockImages, Sink: sink, Headless: headless}
 }
 
 // Open implements SessionFactory.
@@ -42,6 +47,9 @@ func (f *BrowserSessionFactory) Open() (*Session, error) {
 		return nil, err
 	}
 
+	headless := ResolveHeadless(f.Headless, config.Headless)
+	logging.LogInfo0("session", "browser mode", "headless", headless)
+
 	playwrightWrapper, err := driver.NewPlaywrightWrapper()
 	if err != nil {
 		return nil, fmt.Errorf("start playwright: %w", err)
@@ -49,7 +57,7 @@ func (f *BrowserSessionFactory) Open() (*Session, error) {
 
 	var ctx driver.ContextWrapperInterface
 	if config.UserDataDir != "" {
-		ctx, err = playwrightWrapper.LaunchPersistentContext(config.UserDataDir, config.BrowserChannel, config.ProfileDirectory, false)
+		ctx, err = playwrightWrapper.LaunchPersistentContext(config.UserDataDir, config.BrowserChannel, config.ProfileDirectory, headless)
 		if err != nil {
 			return nil, fmt.Errorf("launch persistent context: %w", err)
 		}
@@ -57,7 +65,7 @@ func (f *BrowserSessionFactory) Open() (*Session, error) {
 			return nil, fmt.Errorf("ensure logged in: %w", err)
 		}
 	} else {
-		browser, err := playwrightWrapper.NewBrowser(false)
+		browser, err := playwrightWrapper.NewBrowser(headless)
 		if err != nil {
 			return nil, fmt.Errorf("launch browser: %w", err)
 		}
