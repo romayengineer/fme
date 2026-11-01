@@ -17,6 +17,15 @@ setup *args:
 doctor:
     @./scripts/doctor.sh
 
+# Re-copy your logged-in Chrome profile into FME_USER_DATA_DIR (fixes an expired session)
+refresh-profile *args:
+    @./scripts/refresh-profile.sh {{args}}
+
+# Internal: refresh the Chrome profile only when its Facebook session has expired.
+[private]
+_ensure-profile:
+    @./scripts/refresh-profile.sh --if-expired --quiet
+
 # Download and tidy dependencies for every module
 tidy:
     @for m in {{modules}}; do echo "tidy $m"; (cd "$m" && go mod tidy); done
@@ -59,11 +68,11 @@ run *args:
     go run ./{{cmd}} {{args}}
 
 # Search Marketplace for a keyword, e.g. `just search "macbook m1"`
-search keyword *args:
+search keyword *args: _ensure-profile
     go run ./{{cmd}} -action=search -keywords="{{keyword}}" {{args}}
 
 # Pull descriptions for all details missing one (opens any listing to grab the PDP template)
-pull-description *args:
+pull-description *args: _ensure-profile
     go run ./{{cmd}} -action=pull_description {{args}}
 
 # Remove duplicate PDP responses, keeping the newest per product id
@@ -71,7 +80,7 @@ dedupe-pdp:
     go run ./{{cmd}} -action=dedupe_pdp
 
 # Visit each known listing to fetch details
-get-details:
+get-details: _ensure-profile
     go run ./{{cmd}} -action=get_details
 
 # Extract products from scraped responses into the database

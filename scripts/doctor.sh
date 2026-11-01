@@ -10,6 +10,9 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 cd "$ROOT_DIR"
 
+# shellcheck source=lib/chrome-profile.sh
+. "$SCRIPT_DIR/lib/chrome-profile.sh"
+
 FAILURES=0
 WARNINGS=0
 
@@ -83,31 +86,33 @@ fi
 section "Chrome profile"
 
 if command -v sqlite3 >/dev/null 2>&1; then
-    has_fb_session() {
-        local profdir="$1" tmpdir n=0 name
-        [ -d "$profdir" ] || return 1
-        tmpdir="$(mktemp -d)"
-        for name in Cookies Cookies-wal Cookies-shm; do
-            [ -f "$profdir/Network/$name" ] && cp -f "$profdir/Network/$name" "$tmpdir/$name" 2>/dev/null
-            [ -f "$profdir/$name" ] && cp -f "$profdir/$name" "$tmpdir/$name" 2>/dev/null
-        done
-        if [ -f "$tmpdir/Cookies" ]; then
-            n="$(sqlite3 "$tmpdir/Cookies" \
-                "select count(*) from cookies where name='c_user' and host_key like '%facebook%';" 2>/dev/null || echo 0)"
-        fi
-        rm -rf "$tmpdir"
-        [ "${n:-0}" -gt 0 ] 2>/dev/null
-    }
+    current_profile="${profile_directory:-Default}"
+    src_dir="${FME_CHROME_SRC:-$(fme_default_chrome_src)}"
+    src_profile="${FME_PROFILE_NAME:-$current_profile}"
 
     if [ -n "$user_data_dir" ] && [ -d "$user_data_dir" ]; then
         pass "profile dir exists: $user_data_dir"
-        if [ -n "${profile_directory:-}" ] && has_fb_session "$user_data_dir/$profile_directory"; then
-            pass "profile '$profile_directory' has a Facebook login"
-        elif has_fb_session "$user_data_dir/Default"; then
+
+        dst_expiry=0
+        if fb_session_status "$user_data_dir/$current_profile"; then
+            dst_expiry="$FB_EXPIRY"
+            pass "profile '$current_profile' has a Facebook login (valid until $(fme_epoch_to_date "$FB_EXPIRY"))"
+        elif fb_session_status "$user_data_dir/Default"; then
+            dst_expiry="$FB_EXPIRY"
             pass "profile 'Default' has a Facebook login"
         else
-            fail "no Facebook login in $user_data_dir"
-            fix "log into facebook.com in Chrome, quit it, then: just setup --refresh-profile"
+            fail "no valid Facebook login in $user_data_dir"
+            fix "log into facebook.com in Chrome, then: just refresh-profile"
+        fi
+
+        # Is the everyday Chrome profile ahead of the copy?
+        src_expiry=0
+        if [ -f "$src_dir/$src_profile/Preferences" ] && fb_session_status "$src_dir/$src_profile"; then
+            src_expiry="$FB_EXPIRY"
+            if [ "$dst_expiry" -gt 0 ] && [ "$src_expiry" -gt "$dst_expiry" ] 2>/dev/null; then
+                warn "Chrome profile '$src_profile' has a fresher session than the copy"
+                fix "just refresh-profile"
+            fi
         fi
     elif [ -n "$user_data_dir" ]; then
         fail "profile dir does not exist: $user_data_dir"

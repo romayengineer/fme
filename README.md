@@ -39,7 +39,9 @@ just serve          # browse at http://127.0.0.1:8090/_/
 
 The Facebook session is the one piece of manual setup: open Chrome, log in once, then
 run `just setup`. `setup` copies that profile into `~/.local/share/fme-chrome` so the
-scraper never touches (or fights with) your everyday Chrome profile.
+scraper never touches (or fights with) your everyday Chrome profile. Facebook sessions
+expire after a while; when that happens, `just refresh-profile` re-copies your current
+Chrome session (scrape commands do this automatically when the session has lapsed).
 
 ## What `just setup` does
 
@@ -64,12 +66,40 @@ If no profile has a Facebook session, `setup` lists the candidates it found and 
 you to log in first. Without a profile it also accepts `FME_USERNAME`/`FME_PASSWORD`
 (credential login, but a captcha must be solved on each new session).
 
+## Refreshing the Facebook session
+
+Facebook eventually invalidates the copied cookies, and the scraper reports
+`not logged in (url: …)`. Re-copy the session from Chrome:
+
+```bash
+just refresh-profile
+```
+
+It reads the destination from `.env` (`FME_USER_DATA_DIR` / `FME_PROFILE_DIRECTORY`),
+verifies the source profile still has an unexpired session, copies through a staging
+directory, and only then replaces the old profile — a failed or torn copy leaves the
+previous session intact. Chrome may stay open.
+
+Useful flags:
+
+```bash
+just refresh-profile --list          # profiles that hold a usable session
+just refresh-profile --auto          # copy the profile with the freshest session
+just refresh-profile --profile "Profile 10" --dest ~/custom-fme-profile
+just refresh-profile --dry-run       # show what would be copied
+```
+
+`just search`, `just pull-description` and `just get-details` run
+`just refresh-profile --if-expired` first, so an expired session is replaced
+automatically and a valid one is left alone.
+
 ## Commands
 
 | Command | Description |
 |---|---|
 | `just setup` | One-time (idempotent) bootstrap |
 | `just doctor` | Diagnose a partial/broken setup (read-only) |
+| `just refresh-profile` | Re-copy your Chrome profile after the Facebook session expires |
 | `just search "macbook m1"` | Collect listings for a keyword into `data/__Details` |
 | `just pull-description` | Fill missing `Description` fields via the PDP request |
 | `just process-data` | Re-extract listings from captured responses (no browser) |
@@ -108,9 +138,10 @@ machine keeps its own Chrome-profile path.
 Run `just doctor` first; it prints the exact fix for anything it finds.
 
 - **"not logged in (url: …)"** — the copied session expired. Log into Facebook in
-  Chrome, quit Chrome, then `just setup --refresh-profile`.
+  Chrome, then `just refresh-profile` (no need to quit Chrome).
 - **Profile dir is in use / launch fails** — close the browser using that profile; a
-  stale `SingletonLock` in `~/.local/share/fme-chrome` blocks the launch.
+  stale `SingletonLock` in `FME_USER_DATA_DIR` blocks the launch. `just refresh-profile`
+  reports this instead of copying over a live profile.
 - **`pulled=0` / error `1675004`** — Facebook is throttling the account. Wait, then
   re-run `just pull-description` (optionally `-delay-ms=2000`). Progress is saved.
 - **Chromium download fails** — network/proxy issue; `just run -action=install_drivers`
@@ -129,5 +160,5 @@ go/store/filestore    data/ JSON store + extraction pipeline (ProcessData)
 go/store/db           PocketBase integration (serve, save)
 go/core/              Logging, JSON, codec, string utilities
 ml/                   Python price-prediction pipeline
-scripts/              setup.sh, doctor.sh
+scripts/              setup.sh, refresh-profile.sh, doctor.sh, lib/chrome-profile.sh
 ```

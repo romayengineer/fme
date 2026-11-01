@@ -72,7 +72,7 @@ func (s *ScrapperImpl) Begin() (driver.ContextWrapperInterface, error) {
 			return nil, fmt.Errorf("error LaunchPersistentContext: %v", err)
 		}
 		if err := facebook.EnsureLoggedIn(ctx); err != nil {
-			return nil, fmt.Errorf("error EnsureLoggedIn: %v", err)
+			return nil, fmt.Errorf("error EnsureLoggedIn: %v (expired session? run 'just refresh-profile')", err)
 		}
 	} else {
 		browser, err := playwrightWrapper.NewBrowser(false)
