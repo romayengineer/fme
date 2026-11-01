@@ -17,7 +17,7 @@ func unsetEnv(t *testing.T, keys ...string) {
 
 		t.Cleanup(func() {
 			if existed {
-				_ = os.Setenv(key, old)
+				_ = os.Setenv(key, old) //nolint:usetesting // cleanup must restore the exact value, including unset.
 			} else {
 				_ = os.Unsetenv(key)
 			}
@@ -38,6 +38,13 @@ func TestLoadConfigWithPersistentProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
+	assertProfileConfig(t, config)
+}
+
+// assertProfileConfig checks the persistent-profile settings.
+func assertProfileConfig(t *testing.T, config *Config) {
+	t.Helper()
+
 	if config.UserDataDir != "/tmp/fme-profile" {
 		t.Errorf("UserDataDir = %q", config.UserDataDir)
 	}

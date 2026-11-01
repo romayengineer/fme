@@ -2,7 +2,6 @@ package app
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/romayengineer/fme/go/browser/marketplace"
 	"github.com/romayengineer/fme/go/store/filestore"
@@ -16,30 +15,37 @@ func NewFileDetailStore() *FileDetailStore {
 	return &FileDetailStore{}
 }
 
+// ProcessResponses materializes captured responses into data/__Details.
 func (s *FileDetailStore) ProcessResponses(startTime int64) (int64, error) {
 	return filestore.ProcessData(startTime)
 }
 
+// ForEachDetail calls process for every detail record.
 func (s *FileDetailStore) ForEachDetail(process func(filePath string, jsonData map[string]any) bool, sortit bool) (int, error) {
 	return filestore.ForEachDetail(process, sortit)
 }
 
+// LoadPDPProductIDs returns the ids that already have a PDP response.
 func (s *FileDetailStore) LoadPDPProductIDs() map[string]struct{} {
 	return filestore.LoadPDPProductIDs()
 }
 
+// PendingDescriptions counts records still missing a description.
 func (s *FileDetailStore) PendingDescriptions(existing, unavailable map[string]struct{}) (pending, alreadyFetched, unavailableCount int, err error) {
 	return filestore.PendingDescriptionCount(existing, unavailable)
 }
 
+// FillEmpty backfills missing URLs.
 func (s *FileDetailStore) FillEmpty() error {
 	return filestore.FillEmpty()
 }
 
+// DedupePDP removes duplicate PDP response files.
 func (s *FileDetailStore) DedupePDP() {
 	filestore.DedupePDP()
 }
 
+// DescriptionStats returns description coverage for the store.
 func (s *FileDetailStore) DescriptionStats() (DescriptionStats, error) {
 	stats, err := filestore.ComputeDescriptionStats()
 	if err != nil {
@@ -69,53 +75,30 @@ func (a *App) Search(opts SearchOptions) error {
 		return errors.New("search: session factory is not configured")
 	}
 
-	session, err := a.Sessions.Open()
+	session, err := a.openAuthenticatedSession("search")
 	if err != nil {
-		return fmt.Errorf("search: open session: %w", err)
+		return err
 	}
-	defer func() {
-		if session.Waiter != nil {
-			session.Waiter.Wait()
-		}
-		if err := session.Context.Close(); err != nil {
-			a.Logger.Error("search: close browser context", "error", err)
-		}
-	}()
+	defer a.closeAuthenticatedSession("search", session)
 
-	page, err := session.Context.NewPage()
+	_, pageHelpers, err := newPageHelpers(session.Context, "search")
 	if err != nil {
-		return fmt.Errorf("search: create page: %w", err)
+		return err
 	}
 
-	pageHelpers, err := marketplace.NewPages(page)
-	if err != nil {
-		return fmt.Errorf("search: create page helpers: %w", err)
-	}
-
-	var runErr error
-	if err := pageHelpers.MarketplaceSearch(opts.Keywords, opts.ScrollDown, opts.ScrollSeconds); err != nil {
-		a.Logger.Error("search: run marketplace search", "error", err)
-		runErr = err
-	}
-
-	// Wait for intercepted responses before materializing them.
-	if session.Waiter != nil {
-		session.Waiter.Wait()
-	}
-
-	if a.Details == nil {
-		return errors.New("search: detail store is not configured")
-	}
-	if _, err := a.Details.ProcessResponses(0); err != nil {
-		a.Logger.Error("search: process responses", "error", err)
-		if runErr == nil {
-			runErr = err
-		}
-	}
-
-	if opts.Pause != nil {
-		opts.Pause()
-	}
+	runErr := a.runSearch(pageHelpers, opts)
+	runErr = a.finishCapture(session, "search", runErr)
+	a.pause(opts.Pause)
 
 	return runErr
+}
+
+// runSearch drives the Marketplace search, logging rather than returning the
+// search error so captured responses are still materialized.
+func (a *App) runSearch(pageHelpers marketplace.PagesInterface, opts SearchOptions) error {
+	if err := pageHelpers.MarketplaceSearch(opts.Keywords, opts.ScrollDown, opts.ScrollSeconds); err != nil {
+		a.Logger.Error("search: run marketplace search", "error", err)
+		return err
+	}
+	return nil
 }

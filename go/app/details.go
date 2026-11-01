@@ -20,68 +20,78 @@ type GetDetailsOptions struct {
 // GetDetails opens every detail record that has no PriceAmount yet. The browser
 // visit triggers the PDP response that capture persists.
 func (a *App) GetDetails(opts GetDetailsOptions) error {
+	if err := a.validateDetails(); err != nil {
+		return err
+	}
+
+	session, err := a.openAuthenticatedSession("get-details")
+	if err != nil {
+		return err
+	}
+	defer a.closeAuthenticatedSession("get-details", session)
+
+	_, pageHelpers, err := newPageHelpers(session.Context, "get-details")
+	if err != nil {
+		return err
+	}
+
+	if err := a.visitDetails(pageHelpers, detailDelay(opts.Delay)); err != nil {
+		return err
+	}
+
+	a.pause(opts.Pause)
+	return nil
+}
+
+// validateDetails checks the dependencies GetDetails needs.
+func (a *App) validateDetails() error {
 	if a.Sessions == nil {
 		return errors.New("get-details: session factory is not configured")
 	}
 	if a.Details == nil {
 		return errors.New("get-details: detail store is not configured")
 	}
+	return nil
+}
 
-	delay := opts.Delay
+// detailDelay returns the configured delay or the three-second default.
+func detailDelay(delay time.Duration) time.Duration {
 	if delay == 0 {
-		delay = 3 * time.Second
+		return 3 * time.Second
 	}
+	return delay
+}
 
-	session, err := a.Sessions.Open()
-	if err != nil {
-		return fmt.Errorf("get-details: open session: %w", err)
-	}
-	defer func() {
-		if session.Waiter != nil {
-			session.Waiter.Wait()
-		}
-		if err := session.Context.Close(); err != nil {
-			a.Logger.Error("get-details: close browser context", "error", err)
-		}
-	}()
-
-	page, err := session.Context.NewPage()
-	if err != nil {
-		return fmt.Errorf("get-details: create page: %w", err)
-	}
-	pageHelpers, err := marketplace.NewPages(page)
-	if err != nil {
-		return fmt.Errorf("get-details: create page helpers: %w", err)
-	}
-
-	_, err = a.Details.ForEachDetail(func(filePath string, jsonData map[string]any) bool {
-		if jsonutil.GetKey(jsonData, "PriceAmount") != nil {
-			return true
-		}
-
-		productID, ok := jsonutil.GetKey(jsonData, "ID").(string)
-		if !ok || productID == "" {
-			a.Logger.Warn("get-details: skipping invalid product id", "file", filePath)
-			return true
-		}
-
-		if err := pageHelpers.GoToProduct(productID); err != nil {
-			a.Logger.Error("get-details: open product", "productId", productID, "error", err)
-			return true
-		}
-		time.Sleep(delay)
-
-		return true
+// visitDetails opens each detail record that is missing a price.
+func (a *App) visitDetails(pageHelpers marketplace.PagesInterface, delay time.Duration) error {
+	_, err := a.Details.ForEachDetail(func(filePath string, jsonData map[string]any) bool {
+		return a.visitDetail(pageHelpers, delay, filePath, jsonData)
 	}, false)
 	if err != nil {
 		return fmt.Errorf("get-details: iterate details: %w", err)
 	}
+	return nil
+}
 
-	if opts.Pause != nil {
-		opts.Pause()
+// visitDetail opens one listing, when it still needs a price.
+func (a *App) visitDetail(pageHelpers marketplace.PagesInterface, delay time.Duration, filePath string, jsonData map[string]any) bool {
+	if jsonutil.GetKey(jsonData, "PriceAmount") != nil {
+		return true
 	}
 
-	return nil
+	productID, ok := jsonutil.GetKey(jsonData, "ID").(string)
+	if !ok || productID == "" {
+		a.Logger.Warn("get-details: skipping invalid product id", "file", filePath)
+		return true
+	}
+
+	if err := pageHelpers.GoToProduct(productID); err != nil {
+		a.Logger.Error("get-details: open product", "productID", productID, "error", err)
+		return true
+	}
+	time.Sleep(delay)
+
+	return true
 }
 
 // InstallDrivers downloads the Playwright driver and Chromium ahead of time.

@@ -17,10 +17,15 @@ func percent(part, total int) float64 {
 	return float64(part) / float64(total) * 100
 }
 
+// EmptyPercent returns the share of records whose Description is null.
 func (s DescriptionStats) EmptyPercent() float64 { return percent(s.Empty, s.Total) }
+
+// WithDescriptionPercent returns the share of records with a description.
 func (s DescriptionStats) WithDescriptionPercent() float64 {
 	return percent(s.WithDescription, s.Total)
 }
+
+// UnavailablePercent returns the share of records tombstoned as unavailable.
 func (s DescriptionStats) UnavailablePercent() float64 { return percent(s.Unavailable, s.Total) }
 
 // ProcessResponses materializes captured responses into data/__Details.

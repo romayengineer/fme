@@ -41,7 +41,7 @@ func (p *fakePage) Evaluate(string, ...any) (any, error) {
 	if p.body != "" {
 		return p.body, nil
 	}
-	return nil, nil
+	return nil, nil //nolint:nilnil // fake page has no body.
 }
 
 type fakeContext struct {
@@ -50,14 +50,21 @@ type fakeContext struct {
 }
 
 func (c *fakeContext) NewPage() (driver.PageWrapperInterface, error) { return c.page, nil }
-func (c *fakeContext) Pages() ([]driver.PageWrapperInterface, error) { return nil, nil }
+func (c *fakeContext) Pages() ([]driver.PageWrapperInterface, error) {
+	return nil, nil
+}
+
 func (c *fakeContext) Close() error {
 	c.closed = true
 	return nil
 }
-func (c *fakeContext) StorageState() (*playwright.StorageState, error) { return nil, nil }
+
+func (c *fakeContext) StorageState() (*playwright.StorageState, error) {
+	return nil, nil //nolint:nilnil // fake context has no stored session.
+}
+
 func (c *fakeContext) Fetch(any, ...playwright.APIRequestContextFetchOptions) (playwright.APIResponse, error) {
-	return nil, nil
+	return nil, nil //nolint:nilnil // fake context cannot fetch.
 }
 func (c *fakeContext) Route(any, driver.RouteHandler) error { return nil }
 func (c *fakeContext) OnRequest(driver.RequestHandler)      {}
@@ -184,15 +191,27 @@ func TestSearchRunsSearchAndProcessesResponses(t *testing.T) {
 		t.Fatalf("Search: %v", err)
 	}
 
+	assertSearchRun(t, page, details)
+	assertSearchShutdown(t, waiter, paused, ctx)
+}
+
+// assertSearchRun checks the search navigation and response processing.
+func assertSearchRun(t *testing.T, page *fakePage, details *fakeDetails) {
+	t.Helper()
+
 	if len(page.gotos) != 1 {
 		t.Fatalf("got %d navigations, want 1", len(page.gotos))
 	}
 	if !strings.Contains(page.gotos[0], "query=macbook+m1") {
 		t.Errorf("search URL = %q", page.gotos[0])
 	}
-	if details.processed != 1 {
-		t.Errorf("ProcessResponses called %d times, want 1", details.processed)
-	}
+	assertInt(t, "ProcessResponses calls", details.processed, 1)
+}
+
+// assertSearchShutdown checks the waiter, pause, and context shutdown.
+func assertSearchShutdown(t *testing.T, waiter *fakeWaiter, paused bool, ctx *fakeContext) {
+	t.Helper()
+
 	if waiter.waits < 1 {
 		t.Errorf("Waiter.Wait called %d times, want at least 1", waiter.waits)
 	}

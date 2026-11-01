@@ -6,6 +6,24 @@ func boolPtr(value bool) *bool {
 	return &value
 }
 
+// assertOptionalBool compares an optional bool.
+func assertOptionalBool(t *testing.T, got, want *bool) {
+	t.Helper()
+
+	if want == nil {
+		if got != nil {
+			t.Fatalf("headlessFromEnv() = %v, want nil", *got)
+		}
+		return
+	}
+	if got == nil {
+		t.Fatalf("headlessFromEnv() = nil, want %v", *want)
+	}
+	if *got != *want {
+		t.Errorf("headlessFromEnv() = %v, want %v", *got, *want)
+	}
+}
+
 func TestHeadlessFromEnv(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -29,15 +47,7 @@ func TestHeadlessFromEnv(t *testing.T) {
 				t.Setenv("FME_HEADLESS", test.value)
 			}
 
-			got := headlessFromEnv()
-			switch {
-			case test.want == nil && got != nil:
-				t.Fatalf("headlessFromEnv() = %v, want nil", *got)
-			case test.want != nil && got == nil:
-				t.Fatalf("headlessFromEnv() = nil, want %v", *test.want)
-			case test.want != nil && *got != *test.want:
-				t.Errorf("headlessFromEnv() = %v, want %v", *got, *test.want)
-			}
+			assertOptionalBool(t, headlessFromEnv(), test.want)
 		})
 	}
 }

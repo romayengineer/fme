@@ -32,37 +32,46 @@ func LoadConfig() (*Config, error) {
 		return nil, fmt.Errorf("load .env file: %w", err)
 	}
 
-	username := os.Getenv("FME_USERNAME")
-	password := os.Getenv("FME_PASSWORD")
-	userDataDir := os.Getenv("FME_USER_DATA_DIR")
-	browserChannel := os.Getenv("FME_BROWSER_CHANNEL")
-	profileDirectory := os.Getenv("FME_PROFILE_DIRECTORY")
-	headless := headlessFromEnv()
-
-	if userDataDir == "" && (username == "" || password == "") {
+	config := configFromEnv()
+	if config.UserDataDir == "" && (config.UserCredentials.Username == "" || config.UserCredentials.Password == "") {
 		return nil, errors.New("set FME_USER_DATA_DIR or FME_USERNAME/FME_PASSWORD in .env")
 	}
 
-	if userDataDir != "" && browserChannel == "" {
-		browserChannel = "chrome"
-	}
+	config.BrowserChannel = defaultChannel(config.UserDataDir, config.BrowserChannel)
+	printConfigSource(config)
 
-	if userDataDir != "" {
-		fmt.Printf("Using browser profile: %s\n", userDataDir)
-	} else {
-		fmt.Printf("Loaded credentials - Username: %s\n", username)
-	}
+	return config, nil
+}
 
+// configFromEnv reads every session setting from the environment.
+func configFromEnv() *Config {
 	return &Config{
 		UserCredentials: facebook.UserCredentials{
-			Username: username,
-			Password: password,
+			Username: os.Getenv("FME_USERNAME"),
+			Password: os.Getenv("FME_PASSWORD"),
 		},
-		UserDataDir:      userDataDir,
-		BrowserChannel:   browserChannel,
-		ProfileDirectory: profileDirectory,
-		Headless:         headless,
-	}, nil
+		UserDataDir:      os.Getenv("FME_USER_DATA_DIR"),
+		BrowserChannel:   os.Getenv("FME_BROWSER_CHANNEL"),
+		ProfileDirectory: os.Getenv("FME_PROFILE_DIRECTORY"),
+		Headless:         headlessFromEnv(),
+	}
+}
+
+// defaultChannel uses the installed Chrome channel for profile launches.
+func defaultChannel(userDataDir, channel string) string {
+	if userDataDir != "" && channel == "" {
+		return "chrome"
+	}
+	return channel
+}
+
+// printConfigSource reports which login source will be used.
+func printConfigSource(config *Config) {
+	if config.UserDataDir != "" {
+		fmt.Printf("Using browser profile: %s\n", config.UserDataDir)
+		return
+	}
+	fmt.Printf("Loaded credentials - Username: %s\n", config.UserCredentials.Username)
 }
 
 // headlessFromEnv reads FME_HEADLESS. An unset or invalid value yields nil so

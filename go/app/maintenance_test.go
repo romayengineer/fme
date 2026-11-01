@@ -5,35 +5,42 @@ import (
 	"testing"
 )
 
+// requireNoError fails the test on error.
+func requireNoError(t *testing.T, err error) {
+	t.Helper()
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// assertInt compares one integer value.
+func assertInt(t *testing.T, name string, got, want int) {
+	t.Helper()
+
+	if got != want {
+		t.Errorf("%s = %d, want %d", name, got, want)
+	}
+}
+
 func TestMaintenanceDelegatesToDetailStore(t *testing.T) {
 	details := &fakeDetails{
 		stats: DescriptionStats{Total: 4, WithDescription: 2, Unavailable: 1, Empty: 1},
 	}
 	app := New(Deps{Details: details})
 
-	if err := app.ProcessResponses(); err != nil {
-		t.Fatalf("ProcessResponses: %v", err)
-	}
-	if details.processed != 1 {
-		t.Errorf("ProcessResponses called %d times, want 1", details.processed)
-	}
+	requireNoError(t, app.ProcessResponses())
+	assertInt(t, "ProcessResponses calls", details.processed, 1)
 
-	if err := app.FillEmpty(); err != nil {
-		t.Fatalf("FillEmpty: %v", err)
-	}
+	requireNoError(t, app.FillEmpty())
 
 	app.DedupePDP()
-	if details.dedupeCalls != 1 {
-		t.Errorf("DedupePDP called %d times, want 1", details.dedupeCalls)
-	}
+	assertInt(t, "DedupePDP calls", details.dedupeCalls, 1)
 
 	stats, err := app.DescriptionStats()
-	if err != nil {
-		t.Fatalf("DescriptionStats: %v", err)
-	}
-	if stats.Total != 4 || stats.WithDescription != 2 {
-		t.Errorf("stats = %+v", stats)
-	}
+	requireNoError(t, err)
+	assertInt(t, "Total", stats.Total, 4)
+	assertInt(t, "WithDescription", stats.WithDescription, 2)
 }
 
 func TestMaintenanceReturnsDetailErrors(t *testing.T) {

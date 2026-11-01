@@ -31,6 +31,13 @@ func TestGetDetailsOpensListingsWithoutPrice(t *testing.T) {
 		t.Fatalf("GetDetails: %v", err)
 	}
 
+	assertDetailsVisit(t, page, paused, ctx)
+}
+
+// assertDetailsVisit checks the navigation, pause, and context shutdown.
+func assertDetailsVisit(t *testing.T, page *fakePage, paused bool, ctx *fakeContext) {
+	t.Helper()
+
 	if len(page.gotos) != 1 {
 		t.Fatalf("got %d navigations, want 1", len(page.gotos))
 	}
