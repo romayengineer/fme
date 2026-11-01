@@ -1,11 +1,39 @@
 package session
 
 import (
+	"errors"
 	"os"
 	"testing"
 
 	"github.com/mxschmitt/playwright-go"
 )
+
+// assertSessionFileMode checks the credentials file is owner-only.
+func assertSessionFileMode(t *testing.T) {
+	t.Helper()
+
+	info, err := os.Stat(sessionFilePath)
+	if err != nil {
+		t.Fatalf("stat session file: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("session file mode = %o, want 600", got)
+	}
+}
+
+// mustLoadSession loads the saved session or fails the test.
+func mustLoadSession(t *testing.T) *playwright.StorageState {
+	t.Helper()
+
+	got, err := LoadSession()
+	if err != nil {
+		t.Fatalf("LoadSession: %v", err)
+	}
+	if got == nil {
+		t.Fatal("LoadSession returned nil state")
+	}
+	return got
+}
 
 func TestSaveLoadSessionRoundTrip(t *testing.T) {
 	t.Chdir(t.TempDir())
@@ -19,22 +47,9 @@ func TestSaveLoadSessionRoundTrip(t *testing.T) {
 	if err := SaveSession(state); err != nil {
 		t.Fatalf("SaveSession: %v", err)
 	}
+	assertSessionFileMode(t)
 
-	info, err := os.Stat(sessionFilePath)
-	if err != nil {
-		t.Fatalf("stat session file: %v", err)
-	}
-	if got := info.Mode().Perm(); got != 0o600 {
-		t.Fatalf("session file mode = %o, want 600", got)
-	}
-
-	got, err := LoadSession()
-	if err != nil {
-		t.Fatalf("LoadSession: %v", err)
-	}
-	if got == nil {
-		t.Fatal("LoadSession returned nil state")
-	}
+	got := mustLoadSession(t)
 	if len(got.Cookies) != 1 || got.Cookies[0].Value != "secret" {
 		t.Fatalf("cookies = %#v, want the saved cookie", got.Cookies)
 	}
@@ -44,8 +59,8 @@ func TestLoadSessionMissingFile(t *testing.T) {
 	t.Chdir(t.TempDir())
 
 	got, err := LoadSession()
-	if err != nil {
-		t.Fatalf("LoadSession: %v", err)
+	if !errors.Is(err, ErrNoSession) {
+		t.Fatalf("LoadSession error = %v, want ErrNoSession", err)
 	}
 	if got != nil {
 		t.Fatalf("LoadSession = %#v, want nil", got)

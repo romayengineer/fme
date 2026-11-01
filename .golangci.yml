@@ -250,6 +250,8 @@ linters:
             - "**/go/browser/facebook/**"
           allow:
             - "$gostd"
+            # Used for the StorageState type carried by the session store.
+            - "github.com/mxschmitt/playwright-go"
             - "github.com/romayengineer/fme/go/browser/driver"
             - "github.com/romayengineer/fme/go/browser/marketplace"
             - "github.com/romayengineer/fme/go/browser/session"

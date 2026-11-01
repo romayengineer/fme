@@ -1,3 +1,5 @@
+// Package marketplace drives Facebook Marketplace pages through the browser
+// driver.
 package marketplace
 
 import (
@@ -11,6 +13,7 @@ import (
 	"github.com/romayengineer/fme/go/marketplace/model"
 )
 
+// Pages is the page-object implementation bound to one browser page.
 type Pages struct {
 	Page           driver.PageWrapperInterface
 	InputUsername  string
@@ -21,21 +24,29 @@ type Pages struct {
 
 // AuthPage reports whether the Facebook session is usable.
 type AuthPage interface {
+	// IsInHomePage reports whether the page is a logged-in Facebook page.
 	IsInHomePage() bool
+	// WaitForHomePage waits up to timeoutSeconds for a logged-in page.
 	WaitForHomePage(timeoutSeconds int) bool
 }
 
 // SearchPage drives the Marketplace search feed.
 type SearchPage interface {
-	MarketpaceSearch(searchKeyworkds string, scrollDown bool, scrollSeconds int) error
+	// MarketplaceSearch opens a Marketplace search for the keywords.
+	MarketplaceSearch(searchKeywords string, scrollDown bool, scrollSeconds int) error
+	// MarketplaceHome opens the Marketplace home page.
 	MarketplaceHome() error
+	// ScrollDown scrolls until the page height stops growing for maxSeconds.
 	ScrollDown(maxSeconds int) error
 }
 
 // ProductPage opens individual Marketplace listings.
 type ProductPage interface {
+	// OpenFirstProduct clicks the first listing on the search page.
 	OpenFirstProduct() bool
+	// OpenProduct clicks the listing at index.
 	OpenProduct(index int) bool
+	// GoToProduct navigates directly to a listing URL.
 	GoToProduct(id string) error
 }
 
@@ -47,6 +58,7 @@ type PagesInterface interface {
 	ProductPage
 }
 
+// NewPages binds the page object to page and returns the full page surface.
 func NewPages(page driver.PageWrapperInterface) (PagesInterface, error) {
 	pages := Pages{
 		Page:          page,
@@ -59,6 +71,7 @@ func NewPages(page driver.PageWrapperInterface) (PagesInterface, error) {
 	return &pages, nil
 }
 
+// IsInHomePage reports whether the page is a logged-in Facebook page.
 func (pl *Pages) IsInHomePage() bool {
 	if err := pl.Page.Locator(pl.InputSearchBar).WaitFor(30_000); err != nil {
 		logging.LogDebug0("IsInHomePage", "search bar not visible, checking URL", "error", err)
@@ -66,30 +79,46 @@ func (pl *Pages) IsInHomePage() bool {
 	return pl.isLoggedIn()
 }
 
+// isLoggedIn reports whether the session can reach Marketplace.
 func (pl *Pages) isLoggedIn() bool {
+	if pl.searchBarVisible() {
+		return true
+	}
+
+	currentURL, ok := pl.currentURL()
+	return ok && isLoggedInURL(currentURL)
+}
+
+// searchBarVisible reports whether the Marketplace search bar is on the page.
+func (pl *Pages) searchBarVisible() bool {
 	items, err := pl.Page.Locator(pl.InputSearchBar).All()
 	if err != nil {
 		logging.LogDebug0("isLoggedIn", "could not inspect search bar", "error", err)
 		return false
 	}
-	if len(items) > 0 {
-		return true
-	}
+	return len(items) > 0
+}
 
+// currentURL returns the page's location, when it is a string.
+func (pl *Pages) currentURL() (string, bool) {
 	urlAny, err := pl.Page.Evaluate("location.href")
 	if err != nil {
-		return false
+		return "", false
 	}
 	currentURL, ok := urlAny.(string)
-	if !ok {
-		return false
-	}
+	return currentURL, ok
+}
+
+// isLoggedInURL reports whether url is a Facebook page that is not a login or
+// checkpoint wall.
+func isLoggedInURL(currentURL string) bool {
 	if !strings.Contains(currentURL, "facebook.com") {
 		return false
 	}
 	return !strings.Contains(currentURL, "/login") && !strings.Contains(currentURL, "checkpoint")
 }
 
+// WaitForHomePage waits up to timeoutSeconds for a logged-in page.
 func (pl *Pages) WaitForHomePage(timeoutSeconds int) bool {
 	for range timeoutSeconds {
 		if pl.isLoggedIn() {
@@ -100,15 +129,21 @@ func (pl *Pages) WaitForHomePage(timeoutSeconds int) bool {
 	return false
 }
 
+// ScrollDown scrolls until the page height stops growing for maxSeconds.
 func (pl *Pages) ScrollDown(maxSeconds int) error {
 	if maxSeconds <= 0 {
 		logging.LogInfo0("ScrollDown", "scrolling disabled")
 		return nil
 	}
+	return pl.scrollUntilStable(maxSeconds)
+}
 
-	maxScrollHeight := 0
+// scrollUntilStable scrolls until the page height is stable for maxSeconds.
+func (pl *Pages) scrollUntilStable(maxSeconds int) error {
 	start := time.Now()
 	lastIncrease := start
+	maxScrollHeight := 0
+
 	for {
 		// Stop only after the page height has failed to grow for maxSeconds.
 		if time.Since(lastIncrease) >= time.Duration(maxSeconds)*time.Second {
@@ -117,25 +152,35 @@ func (pl *Pages) ScrollDown(maxSeconds int) error {
 			return nil
 		}
 
-		scrollHeight, err := pl.Page.Evaluate("document.body.scrollHeight")
+		height, err := pl.scrollOnce()
 		if err != nil {
-			return fmt.Errorf("read page scroll height: %w", err)
+			return err
 		}
-		if intHeight, ok := toInt(scrollHeight); ok {
-			if intHeight > maxScrollHeight {
-				lastIncrease = time.Now()
-				maxScrollHeight = intHeight
-				logging.LogDebug0("ScrollDown", "maxScrollHeight", "height", maxScrollHeight)
-			}
-		} else {
-			logging.LogDebug0("ScrollDown", "unexpected scrollHeight type", "type", fmt.Sprintf("%T", scrollHeight))
-		}
-
-		time.Sleep(1 * time.Second)
-		if _, err := pl.Page.Evaluate("window.scrollTo(0, document.body.scrollHeight)"); err != nil {
-			return fmt.Errorf("scroll page: %w", err)
+		if height > maxScrollHeight {
+			lastIncrease = time.Now()
+			maxScrollHeight = height
+			logging.LogDebug0("ScrollDown", "maxScrollHeight", "height", maxScrollHeight)
 		}
 	}
+}
+
+// scrollOnce scrolls to the bottom and returns the page height.
+func (pl *Pages) scrollOnce() (int, error) {
+	scrollHeight, err := pl.Page.Evaluate("document.body.scrollHeight")
+	if err != nil {
+		return 0, fmt.Errorf("read page scroll height: %w", err)
+	}
+
+	height, ok := toInt(scrollHeight)
+	if !ok {
+		logging.LogDebug0("ScrollDown", "unexpected scrollHeight type", "type", fmt.Sprintf("%T", scrollHeight))
+	}
+
+	time.Sleep(1 * time.Second)
+	if _, err := pl.Page.Evaluate("window.scrollTo(0, document.body.scrollHeight)"); err != nil {
+		return 0, fmt.Errorf("scroll page: %w", err)
+	}
+	return height, nil
 }
 
 // toInt converts a JavaScript number value returned by Playwright. JS numbers
@@ -150,16 +195,16 @@ func toInt(value any) (int, bool) {
 		return int(v), true
 	case float32:
 		return int(v), true
-	default:
-		return 0, false
 	}
+	return 0, false
 }
 
-func (pl *Pages) MarketpaceSearch(searchKeyworkds string, scrollDown bool, scrollSeconds int) error {
+// MarketplaceSearch opens a Marketplace search for the keywords.
+func (pl *Pages) MarketplaceSearch(searchKeywords string, scrollDown bool, scrollSeconds int) error {
 	params := url.Values{}
-	params.Add("query", searchKeyworkds)
-	baseUrl := "https://www.facebook.com/marketplace/category/search/?" + params.Encode()
-	if err := pl.Page.Goto(baseUrl); err != nil {
+	params.Add("query", searchKeywords)
+	searchURL := "https://www.facebook.com/marketplace/category/search/?" + params.Encode()
+	if err := pl.Page.Goto(searchURL); err != nil {
 		return fmt.Errorf("open marketplace search: %w", err)
 	}
 	if scrollDown {
@@ -168,14 +213,16 @@ func (pl *Pages) MarketpaceSearch(searchKeyworkds string, scrollDown bool, scrol
 	return nil
 }
 
+// MarketplaceHome opens the Marketplace home page.
 func (pl *Pages) MarketplaceHome() error {
 	return pl.Page.Goto("https://www.facebook.com/marketplace/")
 }
 
+// GoToProduct navigates directly to a listing URL.
 func (pl *Pages) GoToProduct(id string) error {
-	baseUrl := model.ProductIDToLink(id)
-	logging.LogInfo0("GoToProduct", "Goto", "url", baseUrl)
-	return pl.Page.Goto(baseUrl)
+	productURL := model.ProductIDToLink(id)
+	logging.LogInfo0("GoToProduct", "Goto", "url", productURL)
+	return pl.Page.Goto(productURL)
 }
 
 // OpenFirstProduct clicks the first Marketplace listing on the search page.

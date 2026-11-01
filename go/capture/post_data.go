@@ -11,6 +11,7 @@ import (
 	"github.com/romayengineer/fme/go/core/orderedmap"
 )
 
+// GetPostDataMap parses a form-encoded GraphQL post body, preserving key order.
 func GetPostDataMap(request playwright.Request) (orderedmap.OrderedMap, error) {
 	om := orderedmap.NewOrderedMap()
 	data, err := request.PostData()
@@ -22,11 +23,11 @@ func GetPostDataMap(request playwright.Request) (orderedmap.OrderedMap, error) {
 		return om, fmt.Errorf("unescape request post data: %w", err)
 	}
 	for p := range strings.SplitSeq(decoded, "&") {
-		key_value := strings.SplitN(p, "=", 2)
-		if len(key_value) < 2 {
+		keyValue := strings.SplitN(p, "=", 2)
+		if len(keyValue) < 2 {
 			return om, fmt.Errorf("malformed post-data field %q", p)
 		}
-		om.Set(key_value[0], key_value[1])
+		om.Set(keyValue[0], keyValue[1])
 	}
 	return om, nil
 }
@@ -47,8 +48,9 @@ func GetPostData(postData orderedmap.OrderedMap) (string, error) {
 	return params.Encode(), nil
 }
 
-// GetPostDataTargetId extracts variables.targetId from a parsed GraphQL post-data map.
-func GetPostDataTargetId(postData orderedmap.OrderedMap) string {
+// GetPostDataTargetID extracts variables.targetId from a parsed GraphQL
+// post-data map.
+func GetPostDataTargetID(postData orderedmap.OrderedMap) string {
 	varsStr, ok := postData.Get("variables")
 	if !ok {
 		return ""
@@ -59,6 +61,6 @@ func GetPostDataTargetId(postData orderedmap.OrderedMap) string {
 		return ""
 	}
 
-	targetId, _ := vars["targetId"].(string)
-	return targetId
+	targetID, _ := vars["targetId"].(string)
+	return targetID
 }

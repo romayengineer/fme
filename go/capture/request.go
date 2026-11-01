@@ -14,29 +14,34 @@ import (
 	"github.com/romayengineer/fme/go/marketplace/extract"
 )
 
+// GetHeaders returns the request headers. When simple is true it uses the
+// cheap subset Playwright tracks; otherwise it fetches every header and drops
+// the HTTP/2 pseudo-headers.
 func GetHeaders(request playwright.Request, simple bool) (map[string]string, error) {
-	headers := map[string]string{}
-
 	if simple {
-		headers = request.Headers()
-	} else {
+		return request.Headers(), nil
+	}
+	return allHeaders(request)
+}
 
-		headersDirty, err := request.AllHeaders()
-		if err != nil {
-			return nil, err
-		}
-
-		for h, v := range headersDirty {
-			if strings.HasPrefix(h, ":") {
-				continue
-			}
-			headers[h] = v
-		}
+// allHeaders returns every request header except the pseudo-headers.
+func allHeaders(request playwright.Request) (map[string]string, error) {
+	headersDirty, err := request.AllHeaders()
+	if err != nil {
+		return nil, err
 	}
 
+	headers := make(map[string]string, len(headersDirty))
+	for h, v := range headersDirty {
+		if strings.HasPrefix(h, ":") {
+			continue
+		}
+		headers[h] = v
+	}
 	return headers, nil
 }
 
+// RunRequestWithData replays request with data as the body.
 func RunRequestWithData(ctx driver.ContextWrapperInterface, pwRequest playwright.Request, data string, headersSimple bool) (playwright.APIResponse, error) {
 	url := pwRequest.URL()
 	method := pwRequest.Method()
@@ -72,6 +77,7 @@ func RunRequestWithData(ctx driver.ContextWrapperInterface, pwRequest playwright
 	return response, nil
 }
 
+// RunRequest replays request with its captured post data.
 func RunRequest(ctx driver.ContextWrapperInterface, pwRequest playwright.Request, headersSimple bool) (playwright.APIResponse, error) {
 	data, err := pwRequest.PostData()
 	if err != nil {
@@ -92,6 +98,8 @@ var headerReplaySkip = map[string]struct{}{
 	"accept-encoding":   {},
 }
 
+// ReplayHeaders copies headers, dropping the ones tied to the original
+// body or connection.
 func ReplayHeaders(headers map[string]string) map[string]string {
 	out := map[string]string{}
 	for key, value := range headers {
@@ -127,24 +135,29 @@ type PDPOutcome struct {
 // The request must run in the page: Facebook rejects the replayed GraphQL request
 // with error 1357054 when it is issued outside the page context (e.g. via an
 // APIRequestContext), even though the body and headers are identical.
-func FetchPDP(page driver.PageWrapperInterface, template *PDPTemplate, productId string, sink Sink) (PDPOutcome, error) {
+func FetchPDP(page driver.PageWrapperInterface, template *PDPTemplate, productID string, sink Sink) (PDPOutcome, error) {
 	if sink == nil {
 		return PDPOutcome{}, errors.New("response sink is not configured")
 	}
 
-	postDataMap := template.PostDataMap.Clone()
-	if err := postDataMap.SetJSONString("variables", "targetId", productId); err != nil {
-		return PDPOutcome{}, fmt.Errorf("error setting targetId: %w", err)
-	}
-
-	postData, err := GetPostData(postDataMap)
+	body, err := replayPDP(page, template, productID)
 	if err != nil {
-		return PDPOutcome{}, fmt.Errorf("error building post data: %w", err)
+		return PDPOutcome{}, err
 	}
 
-	headers := map[string]any{}
-	for key, value := range ReplayHeaders(template.Headers) {
-		headers[key] = value
+	jsonDatas, err := jsonutil.ExtractJSONFromBody(body)
+	if err != nil {
+		return PDPOutcome{}, fmt.Errorf("error ExtractJSONFromBody: %w", err)
+	}
+
+	return classifyPDPResponse(jsonDatas, body, productID, sink)
+}
+
+// replayPDP runs the PDP query in the page and returns the response body.
+func replayPDP(page driver.PageWrapperInterface, template *PDPTemplate, productID string) ([]byte, error) {
+	postData, err := buildPDPPostData(template, productID)
+	if err != nil {
+		return nil, err
 	}
 
 	result, err := page.Evaluate(`async (opts) => {
@@ -158,24 +171,45 @@ func FetchPDP(page driver.PageWrapperInterface, template *PDPTemplate, productId
 	}`, map[string]any{
 		"url":     template.URL,
 		"method":  template.Method,
-		"headers": headers,
+		"headers": replayHeaderMap(template.Headers),
 		"body":    postData,
 	})
 	if err != nil {
-		return PDPOutcome{}, fmt.Errorf("error evaluating fetch: %w", err)
+		return nil, fmt.Errorf("error evaluating fetch: %w", err)
 	}
 
 	bodyStr, ok := result.(string)
 	if !ok {
-		return PDPOutcome{}, fmt.Errorf("unexpected fetch result type %T", result)
+		return nil, fmt.Errorf("unexpected fetch result type %T", result)
+	}
+	return []byte(strings.TrimPrefix(bodyStr, "for (;;);")), nil
+}
+
+// buildPDPPostData clones the template body and points it at productID.
+func buildPDPPostData(template *PDPTemplate, productID string) (string, error) {
+	postDataMap := template.PostDataMap.Clone()
+	if err := postDataMap.SetJSONString("variables", "targetId", productID); err != nil {
+		return "", fmt.Errorf("error setting targetId: %w", err)
 	}
 
-	body := []byte(strings.TrimPrefix(bodyStr, "for (;;);"))
-	jsonDatas, err := jsonutil.ExtractJSONFromBody(body)
+	postData, err := GetPostData(postDataMap)
 	if err != nil {
-		return PDPOutcome{}, fmt.Errorf("error ExtractJSONFromBody: %w", err)
+		return "", fmt.Errorf("error building post data: %w", err)
 	}
+	return postData, nil
+}
 
+// replayHeaderMap builds the JS options map from the replay headers.
+func replayHeaderMap(headers map[string]string) map[string]any {
+	out := make(map[string]any, len(headers))
+	for key, value := range ReplayHeaders(headers) {
+		out[key] = value
+	}
+	return out
+}
+
+// classifyPDPResponse persists the replayed response and reports its outcome.
+func classifyPDPResponse(jsonDatas []any, body []byte, productID string, sink Sink) (PDPOutcome, error) {
 	if slices.ContainsFunc(jsonDatas, extract.IsErrorRateLimit) {
 		return PDPOutcome{RateLimited: true}, nil
 	}
@@ -183,12 +217,10 @@ func FetchPDP(page driver.PageWrapperInterface, template *PDPTemplate, productId
 	// A PDP container with no listing inside means the item was removed. Do not
 	// write a response file (ProcessData would just delete it); save the raw body
 	// for inspection and let the caller tombstone the id.
-	for _, jsonData := range jsonDatas {
-		if reason, gone := extract.ProductGone(jsonData); gone {
-			logging.LogWarn0("FetchPDP", "listing no longer exists", "productId", productId, "reason", reason)
-			_ = sink.WriteDebugMiss(productId, body)
-			return PDPOutcome{Gone: true}, nil
-		}
+	if reason, gone := goneProduct(jsonDatas); gone {
+		logging.LogWarn0("FetchPDP", "listing no longer exists", "productID", productID, "reason", reason)
+		_ = sink.WriteDebugMiss(productID, body)
+		return PDPOutcome{Gone: true}, nil
 	}
 
 	// Merge the description into data/__Details immediately so it is filled as soon
@@ -196,13 +228,23 @@ func FetchPDP(page driver.PageWrapperInterface, template *PDPTemplate, productId
 	if saved := sink.MergeProducts(jsonDatas); saved == 0 {
 		// No product and not a rate limit: an ambiguous failure. Save the raw body
 		// and report it so the caller can count it and eventually skip the listing.
-		_ = sink.WriteDebugMiss(productId, body)
+		_ = sink.WriteDebugMiss(productID, body)
 		return PDPOutcome{NoProduct: true}, nil
 	}
 
-	if _, err := sink.SaveResponseByID(jsonDatas, "MarketplacePDPContainerQuery", productId); err != nil {
+	if _, err := sink.SaveResponseByID(jsonDatas, "MarketplacePDPContainerQuery", productID); err != nil {
 		return PDPOutcome{}, fmt.Errorf("save PDP response: %w", err)
 	}
 
 	return PDPOutcome{}, nil
+}
+
+// goneProduct reports the first payload that proves its listing was removed.
+func goneProduct(jsonDatas []any) (string, bool) {
+	for _, jsonData := range jsonDatas {
+		if reason, gone := extract.ProductGone(jsonData); gone {
+			return reason, true
+		}
+	}
+	return "", false
 }

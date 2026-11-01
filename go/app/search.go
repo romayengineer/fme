@@ -93,7 +93,7 @@ func (a *App) Search(opts SearchOptions) error {
 	}
 
 	var runErr error
-	if err := pageHelpers.MarketpaceSearch(opts.Keywords, opts.ScrollDown, opts.ScrollSeconds); err != nil {
+	if err := pageHelpers.MarketplaceSearch(opts.Keywords, opts.ScrollDown, opts.ScrollSeconds); err != nil {
 		a.Logger.Error("search: run marketplace search", "error", err)
 		runErr = err
 	}

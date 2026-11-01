@@ -64,14 +64,22 @@ func testTemplate() *PDPTemplate {
 	}
 }
 
+// mustFetchPDP replays a PDP fetch or fails the test.
+func mustFetchPDP(t *testing.T, body, id string, sink *fakeSink) PDPOutcome {
+	t.Helper()
+
+	outcome, err := FetchPDP(fakePage{body: body}, testTemplate(), id, sink)
+	if err != nil {
+		t.Fatalf("FetchPDP: %v", err)
+	}
+	return outcome
+}
+
 func TestFetchPDPSuccess(t *testing.T) {
 	body := `{"data":{"viewer":{"marketplace_product_details_page":{"target":{"id":"999","redacted_description":{"text":"hi"}}}}}}`
 	sink := &fakeSink{mergeResult: 1}
 
-	outcome, err := FetchPDP(fakePage{body: body}, testTemplate(), "999", sink)
-	if err != nil {
-		t.Fatalf("FetchPDP: %v", err)
-	}
+	outcome := mustFetchPDP(t, body, "999", sink)
 	if outcome != (PDPOutcome{}) {
 		t.Fatalf("outcome = %+v, want success", outcome)
 	}
@@ -87,10 +95,7 @@ func TestFetchPDPGone(t *testing.T) {
 	body := `{"data":{"viewer":{"marketplace_product_details_page":{"id":"page"}}}}`
 	sink := &fakeSink{}
 
-	outcome, err := FetchPDP(fakePage{body: body}, testTemplate(), "555", sink)
-	if err != nil {
-		t.Fatalf("FetchPDP: %v", err)
-	}
+	outcome := mustFetchPDP(t, body, "555", sink)
 	if !outcome.Gone {
 		t.Fatalf("outcome = %+v, want Gone", outcome)
 	}
@@ -105,10 +110,7 @@ func TestFetchPDPGone(t *testing.T) {
 func TestFetchPDPNoProduct(t *testing.T) {
 	sink := &fakeSink{mergeResult: 0}
 
-	outcome, err := FetchPDP(fakePage{body: `{"data":{"unrelated":true}}`}, testTemplate(), "7", sink)
-	if err != nil {
-		t.Fatalf("FetchPDP: %v", err)
-	}
+	outcome := mustFetchPDP(t, `{"data":{"unrelated":true}}`, "7", sink)
 	if !outcome.NoProduct || outcome.Gone || outcome.RateLimited {
 		t.Fatalf("outcome = %+v, want NoProduct", outcome)
 	}
@@ -121,13 +123,17 @@ func TestFetchPDPRateLimited(t *testing.T) {
 	body := `{"errors":[{"message":"Rate limit exceeded","code":1675004}]}`
 	sink := &fakeSink{}
 
-	outcome, err := FetchPDP(fakePage{body: body}, testTemplate(), "8", sink)
-	if err != nil {
-		t.Fatalf("FetchPDP: %v", err)
-	}
+	outcome := mustFetchPDP(t, body, "8", sink)
 	if !outcome.RateLimited {
 		t.Fatalf("outcome = %+v, want RateLimited", outcome)
 	}
+	assertSinkUntouched(t, sink)
+}
+
+// assertSinkUntouched checks that a rate-limited fetch wrote nothing.
+func assertSinkUntouched(t *testing.T, sink *fakeSink) {
+	t.Helper()
+
 	if sink.responses != 0 || sink.byID != 0 || sink.mergeCalls != 0 || sink.debugMisses != 0 {
 		t.Errorf("rate-limited fetch touched the sink: %+v", sink)
 	}

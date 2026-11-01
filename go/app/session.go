@@ -70,7 +70,7 @@ func (f *BrowserSessionFactory) Open() (*Session, error) {
 			return nil, fmt.Errorf("launch browser: %w", err)
 		}
 
-		facebookScrapper := facebook.NewFacebookScrapper(browser)
+		facebookScrapper := facebook.NewScrapper(browser)
 		ctx, err = facebookScrapper.Login(config.UserCredentials)
 		if err != nil {
 			return nil, fmt.Errorf("login: %w", err)
