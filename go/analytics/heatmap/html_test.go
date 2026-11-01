@@ -16,16 +16,18 @@ func TestHTMLUsesKeylessEsriBasemap(t *testing.T) {
 		t.Fatalf("HTML: %v", err)
 	}
 
-	if !bytes.Contains(html, []byte("server.arcgisonline.com")) {
-		t.Error("expected Esri basemap tiles")
+	markers := []struct {
+		needle string
+		want   bool
+	}{
+		{needle: "server.arcgisonline.com", want: true},
+		{needle: "basemaps.cartocdn.com", want: false},
+		{needle: "tile.openstreetmap.org", want: false},
+		{needle: "FeatureCollection", want: true},
 	}
-	if bytes.Contains(html, []byte("basemaps.cartocdn.com")) {
-		t.Error("must not use CARTO (requires an API key)")
-	}
-	if bytes.Contains(html, []byte("tile.openstreetmap.org")) {
-		t.Error("must not use OSM (requires an API key)")
-	}
-	if !bytes.Contains(html, []byte("FeatureCollection")) {
-		t.Error("expected embedded GeoJSON")
+	for _, m := range markers {
+		if got := bytes.Contains(html, []byte(m.needle)); got != m.want {
+			t.Errorf("%s present = %v, want %v", m.needle, got, m.want)
+		}
 	}
 }

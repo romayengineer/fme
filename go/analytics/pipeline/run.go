@@ -71,11 +71,7 @@ func buildFileHeatmap(opts Options) (Result, []string, []byte, error) {
 		return Result{}, nil, nil, err
 	}
 
-	src := &source.FileSource{Dir: opts.Dir, Workers: opts.Workers}
-	var points analytics.PointSource = src
-	if opts.MinRepeatCount > 0 {
-		points = source.DropCityCentroids(src, opts.MinRepeatCount)
-	}
+	src, points := pointSource(opts)
 	grid := heatmap.Aggregate(points, heatmap.Options{CellDeg: opts.CellDeg})
 
 	if err := src.Err(); err != nil {
@@ -88,52 +84,87 @@ func buildFileHeatmap(opts Options) (Result, []string, []byte, error) {
 	}
 
 	result := Result{
-		MapID: opts.Map,
+		MapID: mapIDOr(opts.Map),
 		Grid:  grid,
 		Stats: sourceStats(points),
-	}
-	if result.MapID == "" {
-		result.MapID = heatmap.DefaultMapID
 	}
 
 	return result, mapIDs, geojson, nil
 }
 
+// pointSource builds the file source and applies the optional city filter.
+func pointSource(opts Options) (*source.FileSource, analytics.PointSource) {
+	src := &source.FileSource{Dir: opts.Dir, Workers: opts.Workers}
+	if opts.MinRepeatCount > 0 {
+		return src, source.DropCityCentroids(src, opts.MinRepeatCount)
+	}
+	return src, src
+}
+
+// mapIDOr returns the selected map, defaulting to the built-in map.
+func mapIDOr(selector string) string {
+	if selector == "" {
+		return heatmap.DefaultMapID
+	}
+	return selector
+}
+
 // writeFileHeatmap writes the GeoJSON and one HTML page per selected map.
 func writeFileHeatmap(opts Options, result *Result, mapIDs []string, geojson []byte) error {
-	if dir := filepath.Dir(opts.OutBase); dir != "" {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := writeGeoJSON(opts.OutBase, geojson); err != nil {
+		return err
+	}
+	result.GeoJSONPath = opts.OutBase + ".geojson"
+
+	if err := writeHTMLPages(opts, result, mapIDs); err != nil {
+		return err
+	}
+
+	result.HTMLPath = result.HTMLPaths[0]
+	return nil
+}
+
+// writeGeoJSON writes the GeoJSON document, creating the output directory.
+func writeGeoJSON(outBase string, geojson []byte) error {
+	if dir := filepath.Dir(outBase); dir != "" {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
 			return fmt.Errorf("create output dir: %w", err)
 		}
 	}
 
-	geojsonPath := opts.OutBase + ".geojson"
-	if err := os.WriteFile(geojsonPath, geojson, 0o644); err != nil {
+	if err := os.WriteFile(outBase+".geojson", geojson, 0o600); err != nil {
 		return fmt.Errorf("write geojson: %w", err)
 	}
-	result.GeoJSONPath = geojsonPath
+	return nil
+}
 
+// writeHTMLPages renders and writes one page per selected map.
+func writeHTMLPages(opts Options, result *Result, mapIDs []string) error {
 	for _, mapID := range mapIDs {
-		html, err := result.Grid.RenderHTML(mapID, heatmap.MapOptions{
-			Title: opts.Title,
-			Token: tokenFor(mapID, opts.MapToken),
-		})
+		path, err := writeHTMLPage(opts, result.Grid, mapID)
 		if err != nil {
-			return fmt.Errorf("build html for %s: %w", mapID, err)
-		}
-
-		path := fmt.Sprintf("%s.%s.html", opts.OutBase, mapID)
-		if err := os.WriteFile(path, html, 0o644); err != nil {
-			return fmt.Errorf("write html for %s: %w", mapID, err)
+			return err
 		}
 		result.HTMLPaths = append(result.HTMLPaths, path)
 	}
+	return nil
+}
 
-	if len(result.HTMLPaths) > 0 {
-		result.HTMLPath = result.HTMLPaths[0]
+// writeHTMLPage renders and writes one map page.
+func writeHTMLPage(opts Options, grid heatmap.Grid, mapID string) (string, error) {
+	html, err := grid.RenderHTML(mapID, heatmap.MapOptions{
+		Title: opts.Title,
+		Token: tokenFor(mapID, opts.MapToken),
+	})
+	if err != nil {
+		return "", fmt.Errorf("build html for %s: %w", mapID, err)
 	}
 
-	return nil
+	path := fmt.Sprintf("%s.%s.html", opts.OutBase, mapID)
+	if err := os.WriteFile(path, html, 0o600); err != nil {
+		return "", fmt.Errorf("write html for %s: %w", mapID, err)
+	}
+	return path, nil
 }
 
 // sourceStats reports coverage from a source that implements StatsSource.

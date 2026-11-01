@@ -8,10 +8,21 @@ import (
 	"github.com/romayengineer/fme/go/analytics"
 )
 
+// writeDetail writes one detail fixture.
 func writeDetail(t *testing.T, dir, name, body string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
 		t.Fatalf("write %s: %v", name, err)
+	}
+}
+
+// assertInt compares one integer value.
+func assertInt(t *testing.T, name string, got, want int) {
+	t.Helper()
+
+	if got != want {
+		t.Errorf("%s = %d, want %d", name, got, want)
 	}
 }
 
@@ -32,17 +43,18 @@ func TestFileSourceSkipsInvalidCoordinates(t *testing.T) {
 		return true
 	})
 
-	if n != 1 || len(got) != 1 {
-		t.Fatalf("points = %d, want 1", n)
+	assertInt(t, "points", n, 1)
+	if len(got) != 1 {
+		t.Fatalf("points = %d, want 1", len(got))
 	}
-	if got[0].Lat != -34.60 || got[0].Lon != -58.40 {
-		t.Errorf("point = %+v, want the valid one", got[0])
+	if want := (analytics.GeoPoint{Lat: -34.60, Lon: -58.40}); got[0] != want {
+		t.Errorf("point = %+v, want %+v", got[0], want)
 	}
 
 	stats := src.Stats()
-	if stats.Scanned != 5 || stats.Valid != 1 || stats.Skipped != 4 {
-		t.Errorf("stats = %+v, want {Scanned:5 Valid:1 Skipped:4}", stats)
-	}
+	assertInt(t, "Scanned", stats.Scanned, 5)
+	assertInt(t, "Valid", stats.Valid, 1)
+	assertInt(t, "Skipped", stats.Skipped, 4)
 }
 
 func TestFileSourceEmptyDir(t *testing.T) {

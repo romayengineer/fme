@@ -119,6 +119,12 @@ func (s *FileSource) Err() error {
 // readAll reads the given files concurrently and returns the valid points (with
 // their city) in the same order as paths, plus coverage stats.
 func readAll(paths []string, workers int) ([]analytics.LocatedPoint, analytics.Stats) {
+	results, scanned := readFilesConcurrently(paths, workers)
+	return flattenPoints(results, scanned)
+}
+
+// readFilesConcurrently parses every path with a worker pool.
+func readFilesConcurrently(paths []string, workers int) ([][]analytics.LocatedPoint, []bool) {
 	results := make([][]analytics.LocatedPoint, len(paths))
 	scanned := make([]bool, len(paths))
 
@@ -138,9 +144,14 @@ func readAll(paths []string, workers int) ([]analytics.LocatedPoint, analytics.S
 	close(jobs)
 	wg.Wait()
 
+	return results, scanned
+}
+
+// collectPoints flattens the per-file results and computes coverage stats.
+func flattenPoints(results [][]analytics.LocatedPoint, scanned []bool) ([]analytics.LocatedPoint, analytics.Stats) {
 	var stats analytics.Stats
-	points := make([]analytics.LocatedPoint, 0, len(paths))
-	for i := range paths {
+	points := make([]analytics.LocatedPoint, 0, len(results))
+	for i := range results {
 		if !scanned[i] {
 			continue
 		}
@@ -159,43 +170,71 @@ func detailFiles(dir string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read detail directory %s: %w", dir, err)
 	}
+
 	paths := make([]string, 0, len(entries))
 	for _, e := range entries {
-		if e.IsDir() {
-			continue
+		if isDetailFile(e) {
+			paths = append(paths, filepath.Join(dir, e.Name()))
 		}
-		name := e.Name()
-		if !strings.HasPrefix(name, "detail_") || !strings.HasSuffix(name, ".json") {
-			continue
-		}
-		paths = append(paths, filepath.Join(dir, name))
 	}
 	sort.Strings(paths)
 	return paths, nil
 }
 
+// isDetailFile reports whether an entry is a detail_*.json file.
+func isDetailFile(e os.DirEntry) bool {
+	if e.IsDir() {
+		return false
+	}
+
+	name := e.Name()
+	return strings.HasPrefix(name, "detail_") && strings.HasSuffix(name, ".json")
+}
+
 // readPoints parses one detail file and returns its point, if the coordinates
 // are usable. A missing/invalid file yields no points.
 func readPoints(path string) []analytics.LocatedPoint {
-	body, err := os.ReadFile(path)
-	if err != nil {
+	rec, ok := readDetailRecord(path)
+	if !ok {
 		return nil
 	}
-	var rec detailRecord
-	if err := json.Unmarshal(body, &rec); err != nil {
+
+	lat, lon, ok := usableCoords(rec)
+	if !ok {
 		return nil
 	}
-	if rec.LocationLatitud == nil || rec.LocationLongitude == nil {
-		return nil
-	}
-	lat, lon := *rec.LocationLatitud, *rec.LocationLongitude
-	if !validCoord(lat, lon) {
-		return nil
-	}
+
 	return []analytics.LocatedPoint{{
 		GeoPoint: analytics.GeoPoint{Lat: lat, Lon: lon},
 		City:     cityKey(rec.LocationGeocodeCityID, rec.LocationGeocodeCityName),
 	}}
+}
+
+// readDetailRecord reads and decodes one detail file.
+func readDetailRecord(path string) (detailRecord, bool) {
+	body, err := os.ReadFile(path) //nolint:gosec // path comes from the configured detail directory.
+	if err != nil {
+		return detailRecord{}, false
+	}
+
+	var rec detailRecord
+	if err := json.Unmarshal(body, &rec); err != nil {
+		return detailRecord{}, false
+	}
+	return rec, true
+}
+
+// usableCoords returns the record's coordinates when they are present and valid.
+func usableCoords(rec detailRecord) (float64, float64, bool) {
+	if rec.LocationLatitud == nil || rec.LocationLongitude == nil {
+		return 0, 0, false
+	}
+
+	lat, lon := *rec.LocationLatitud, *rec.LocationLongitude
+	if !validCoord(lat, lon) {
+		return 0, 0, false
+	}
+	return lat, lon, true
 }
 
 // cityKey builds the stable grouping key for a listing's city. The geocode id is
@@ -215,8 +254,10 @@ func cityKey(id, name *string) string {
 // placeholder, which would otherwise pile every missing location onto the map at
 // the Gulf of Guinea.
 func validCoord(lat, lon float64) bool {
-	if lat < -90 || lat > 90 || lon < -180 || lon > 180 {
-		return false
-	}
-	return lat != 0 || lon != 0
+	return inRange(lat, -90, 90) && inRange(lon, -180, 180) && (lat != 0 || lon != 0)
+}
+
+// inRange reports whether value is within the inclusive bounds.
+func inRange(value, minValue, maxValue float64) bool {
+	return value >= minValue && value <= maxValue
 }

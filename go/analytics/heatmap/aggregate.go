@@ -7,6 +7,34 @@ import (
 	"github.com/romayengineer/fme/go/analytics"
 )
 
+// boundsAccumulator grows a bounding box as points are added.
+type boundsAccumulator struct {
+	bounds Bounds
+	seen   bool
+}
+
+// add expands the box to include p.
+func (b *boundsAccumulator) add(p analytics.GeoPoint) {
+	if !b.seen {
+		b.bounds = Bounds{MinLat: p.Lat, MaxLat: p.Lat, MinLon: p.Lon, MaxLon: p.Lon}
+		b.seen = true
+		return
+	}
+
+	b.bounds.MinLat = math.Min(b.bounds.MinLat, p.Lat)
+	b.bounds.MaxLat = math.Max(b.bounds.MaxLat, p.Lat)
+	b.bounds.MinLon = math.Min(b.bounds.MinLon, p.Lon)
+	b.bounds.MaxLon = math.Max(b.bounds.MaxLon, p.Lon)
+}
+
+// value returns the accumulated box, or the zero box when no points were added.
+func (b *boundsAccumulator) value() Bounds {
+	if !b.seen {
+		return Bounds{}
+	}
+	return b.bounds
+}
+
 // Aggregate bins every point from src into a fixed lat/lon grid.
 //
 // It performs a single pass over the points, accumulating counts into a map
@@ -18,41 +46,38 @@ func Aggregate(src analytics.PointSource, opts Options) Grid {
 
 	counts := make(map[CellKey]int)
 	grid := Grid{Options: opts}
+	bounds := &boundsAccumulator{}
 
-	first := true
 	src.ForEach(func(p analytics.GeoPoint) bool {
-		key := CellKey{
-			X: int32(math.Floor(p.Lon / cell)),
-			Y: int32(math.Floor(p.Lat / cell)),
-		}
-		counts[key]++
+		counts[cellKey(p, cell)]++
 		grid.Total++
-
-		if first {
-			grid.Bounds = Bounds{MinLat: p.Lat, MaxLat: p.Lat, MinLon: p.Lon, MaxLon: p.Lon}
-			first = false
-		} else {
-			if p.Lat < grid.Bounds.MinLat {
-				grid.Bounds.MinLat = p.Lat
-			}
-			if p.Lat > grid.Bounds.MaxLat {
-				grid.Bounds.MaxLat = p.Lat
-			}
-			if p.Lon < grid.Bounds.MinLon {
-				grid.Bounds.MinLon = p.Lon
-			}
-			if p.Lon > grid.Bounds.MaxLon {
-				grid.Bounds.MaxLon = p.Lon
-			}
-		}
+		bounds.add(p)
 		return true
 	})
 
-	grid.Cells = make([]Cell, 0, len(counts))
+	grid.Bounds = bounds.value()
+	grid.Cells, grid.MaxCount = gridCells(counts, cell)
+
+	return grid
+}
+
+// cellKey maps a point to its grid cell.
+func cellKey(p analytics.GeoPoint, cell float64) CellKey {
+	return CellKey{
+		X: int32(math.Floor(p.Lon / cell)),
+		Y: int32(math.Floor(p.Lat / cell)),
+	}
+}
+
+// gridCells flattens the counts into sorted cells and returns the peak count.
+func gridCells(counts map[CellKey]int, cell float64) ([]Cell, int) {
+	cells := make([]Cell, 0, len(counts))
+	maxCount := 0
+
 	for key, count := range counts {
 		minLon := float64(key.X) * cell
 		minLat := float64(key.Y) * cell
-		grid.Cells = append(grid.Cells, Cell{
+		cells = append(cells, Cell{
 			Key:    key,
 			Count:  count,
 			MinLat: minLat,
@@ -60,22 +85,24 @@ func Aggregate(src analytics.PointSource, opts Options) Grid {
 			MinLon: minLon,
 			MaxLon: minLon + cell,
 		})
-		if count > grid.MaxCount {
-			grid.MaxCount = count
+		if count > maxCount {
+			maxCount = count
 		}
 	}
 
-	sort.Slice(grid.Cells, func(i, j int) bool {
-		if grid.Cells[i].Count != grid.Cells[j].Count {
-			return grid.Cells[i].Count > grid.Cells[j].Count
-		}
-		if grid.Cells[i].Key.X != grid.Cells[j].Key.X {
-			return grid.Cells[i].Key.X < grid.Cells[j].Key.X
-		}
-		return grid.Cells[i].Key.Y < grid.Cells[j].Key.Y
-	})
+	sort.Slice(cells, func(i, j int) bool { return cellLess(cells[i], cells[j]) })
+	return cells, maxCount
+}
 
-	return grid
+// cellLess orders cells by count descending, then by position.
+func cellLess(a, b Cell) bool {
+	if a.Count != b.Count {
+		return a.Count > b.Count
+	}
+	if a.Key.X != b.Key.X {
+		return a.Key.X < b.Key.X
+	}
+	return a.Key.Y < b.Key.Y
 }
 
 // Intensity returns the count normalized to [0,1] against the busiest cell.

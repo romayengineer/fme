@@ -47,5 +47,6 @@ type Stats struct {
 // StatsSource is an optional interface a PointSource may implement so callers can
 // report coverage without coupling to a concrete implementation.
 type StatsSource interface {
+	// Stats returns the source's coverage counters.
 	Stats() Stats
 }

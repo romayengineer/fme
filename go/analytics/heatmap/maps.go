@@ -114,7 +114,7 @@ func (g Grid) RenderHTML(mapID string, opts MapOptions) ([]byte, error) {
 		Cells:    len(g.Cells),
 		MaxCount: g.MaxCount,
 		CellDeg:  g.Options.CellDeg,
-		GeoJSON:  template.JS(geo),
+		GeoJSON:  embeddedJSON(geo),
 		Token:    opts.Token,
 	}
 	if data.Title == "" {
@@ -126,4 +126,12 @@ func (g Grid) RenderHTML(mapID string, opts MapOptions) ([]byte, error) {
 		return nil, fmt.Errorf("render map %q: %w", mapID, err)
 	}
 	return buf.Bytes(), nil
+}
+
+// embeddedJSON marks geo as literal JavaScript. The payload is produced by
+// encoding/json, so it cannot contain a raw newline; escaping "</" also prevents
+// a listing title from closing the surrounding <script> element early.
+func embeddedJSON(geo []byte) template.JS {
+	escaped := bytes.ReplaceAll(geo, []byte("</"), []byte("<\\/"))
+	return template.JS(escaped) //nolint:gosec // escaped above before opting out of template escaping.
 }

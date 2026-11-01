@@ -39,25 +39,37 @@ type cityCentroidFilter struct {
 func (f *cityCentroidFilter) ensure() {
 	f.once.Do(func() {
 		f.pts = collect(f.inner)
-		if f.minCount <= 0 {
-			return
-		}
-
-		counts := make(map[locatedKey]int)
-		for _, p := range f.pts {
-			if p.City == "" {
-				continue
-			}
-			counts[locatedKey{point: p.GeoPoint, city: p.City}]++
-		}
-
-		f.drop = make(map[locatedKey]bool, len(counts))
-		for key, n := range counts {
-			if n >= f.minCount {
-				f.drop[key] = true
-			}
-		}
+		f.drop = f.dropSet()
 	})
+}
+
+// dropSet returns the coordinates shared by at least minCount listings of the
+// same city, or nil when filtering is disabled.
+func (f *cityCentroidFilter) dropSet() map[locatedKey]bool {
+	if f.minCount <= 0 {
+		return nil
+	}
+
+	counts := countCities(f.pts)
+	drop := make(map[locatedKey]bool, len(counts))
+	for key, n := range counts {
+		if n >= f.minCount {
+			drop[key] = true
+		}
+	}
+	return drop
+}
+
+// countCities counts how many points each city shares per coordinate.
+func countCities(points []analytics.LocatedPoint) map[locatedKey]int {
+	counts := make(map[locatedKey]int)
+	for _, p := range points {
+		if p.City == "" {
+			continue
+		}
+		counts[locatedKey{point: p.GeoPoint, city: p.City}]++
+	}
+	return counts
 }
 
 // ForEach implements analytics.PointSource, skipping dropped coordinates.
