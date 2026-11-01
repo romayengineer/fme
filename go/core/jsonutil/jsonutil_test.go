@@ -10,20 +10,34 @@ func TestLookupDistinguishesAbsentFromNull(t *testing.T) {
 		},
 	}
 
-	if v, ok := Lookup(data, "a.present_null"); !ok || v != nil {
-		t.Errorf("present null: got (%v, %v), want (nil, true)", v, ok)
+	cases := []struct {
+		name   string
+		path   string
+		want   any
+		wantOK bool
+	}{
+		{name: "present null", path: "a.present_null", want: nil, wantOK: true},
+		{name: "value", path: "a.value", want: "x", wantOK: true},
+		{name: "missing key", path: "a.missing", want: nil, wantOK: false},
+		{name: "through non-map", path: "a.value.deeper", want: nil, wantOK: false},
 	}
-	if v, ok := Lookup(data, "a.value"); !ok || v != "x" {
-		t.Errorf("value: got (%v, %v), want (x, true)", v, ok)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assertLookup(t, data, tc.path, tc.want, tc.wantOK)
+		})
 	}
-	if v, ok := Lookup(data, "a.missing"); ok || v != nil {
-		t.Errorf("missing: got (%v, %v), want (nil, false)", v, ok)
-	}
-	if v, ok := Lookup(data, "a.value.deeper"); ok || v != nil {
-		t.Errorf("through non-map: got (%v, %v), want (nil, false)", v, ok)
-	}
-	if v, ok := Lookup(nil, "a"); ok || v != nil {
-		t.Errorf("nil data: got (%v, %v), want (nil, false)", v, ok)
+
+	t.Run("nil data", func(t *testing.T) {
+		assertLookup(t, nil, "a", nil, false)
+	})
+}
+
+func assertLookup(t *testing.T, data any, path string, want any, wantOK bool) {
+	t.Helper()
+
+	got, ok := Lookup(data, path)
+	if ok != wantOK || got != want {
+		t.Errorf("Lookup(%q) = (%v, %v), want (%v, %v)", path, got, ok, want, wantOK)
 	}
 }
 

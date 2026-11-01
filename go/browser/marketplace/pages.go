@@ -173,7 +173,7 @@ func (pl *Pages) MarketplaceHome() error {
 }
 
 func (pl *Pages) GoToProduct(id string) error {
-	baseUrl := model.ProductIDTolink(id)
+	baseUrl := model.ProductIDToLink(id)
 	logging.LogInfo0("GoToProduct", "Goto", "url", baseUrl)
 	return pl.Page.Goto(baseUrl)
 }

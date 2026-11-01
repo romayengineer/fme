@@ -2,60 +2,15 @@ package extract
 
 import "testing"
 
+type productGoneCase struct {
+	name       string
+	data       any
+	wantGone   bool
+	wantReason string
+}
+
 func TestProductGone(t *testing.T) {
-	pdp := func(container any) map[string]any {
-		return map[string]any{"data": map[string]any{"viewer": map[string]any{"marketplace_product_details_page": container}}}
-	}
-
-	tests := []struct {
-		name       string
-		data       any
-		wantGone   bool
-		wantReason string
-	}{
-		{
-			name: "valid listing",
-			data: pdp(map[string]any{"target": map[string]any{"id": "123"}}),
-		},
-		{
-			name:       "null container",
-			data:       pdp(nil),
-			wantGone:   true,
-			wantReason: "null_container",
-		},
-		{
-			name:       "container without target",
-			data:       pdp(map[string]any{"id": "page"}),
-			wantGone:   true,
-			wantReason: "no_target",
-		},
-		{
-			name:       "target null",
-			data:       pdp(map[string]any{"target": nil}),
-			wantGone:   true,
-			wantReason: "no_target",
-		},
-		{
-			name:       "target without id",
-			data:       pdp(map[string]any{"target": map[string]any{"title": "x"}}),
-			wantGone:   true,
-			wantReason: "no_target",
-		},
-		{
-			name: "rate limit is not gone",
-			data: map[string]any{"errors": []any{map[string]any{"message": "Rate limit exceeded"}}},
-		},
-		{
-			name: "login wall is not gone",
-			data: map[string]any{"data": map[string]any{"viewer": nil}},
-		},
-		{
-			name: "unrelated payload is not gone",
-			data: map[string]any{"unrelated": true},
-		},
-	}
-
-	for _, tt := range tests {
+	for _, tt := range productGoneCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			reason, got := ProductGone(tt.data)
 			if got != tt.wantGone {
@@ -65,6 +20,23 @@ func TestProductGone(t *testing.T) {
 				t.Errorf("reason = %q, want %q", reason, tt.wantReason)
 			}
 		})
+	}
+}
+
+func pdpContainer(container any) map[string]any {
+	return map[string]any{"data": map[string]any{"viewer": map[string]any{"marketplace_product_details_page": container}}}
+}
+
+func productGoneCases() []productGoneCase {
+	return []productGoneCase{
+		{name: "valid listing", data: pdpContainer(map[string]any{"target": map[string]any{"id": "123"}})},
+		{name: "null container", data: pdpContainer(nil), wantGone: true, wantReason: "null_container"},
+		{name: "container without target", data: pdpContainer(map[string]any{"id": "page"}), wantGone: true, wantReason: "no_target"},
+		{name: "target null", data: pdpContainer(map[string]any{"target": nil}), wantGone: true, wantReason: "no_target"},
+		{name: "target without id", data: pdpContainer(map[string]any{"target": map[string]any{"title": "x"}}), wantGone: true, wantReason: "no_target"},
+		{name: "rate limit is not gone", data: map[string]any{"errors": []any{map[string]any{"message": "Rate limit exceeded"}}}},
+		{name: "login wall is not gone", data: map[string]any{"data": map[string]any{"viewer": nil}}},
+		{name: "unrelated payload is not gone", data: map[string]any{"unrelated": true}},
 	}
 }
 
@@ -110,7 +82,7 @@ func TestIsErrorRateLimitIgnoresNonStringMessages(t *testing.T) {
 	}
 }
 
-func TestGetTaxonomiPathJoinedSkipsNonStringValues(t *testing.T) {
+func TestGetTaxonomyPathJoinedSkipsNonStringValues(t *testing.T) {
 	detail := map[string]any{
 		"marketplace_listing_renderable_target": map[string]any{
 			"seo_virtual_category": map[string]any{
@@ -123,8 +95,8 @@ func TestGetTaxonomiPathJoinedSkipsNonStringValues(t *testing.T) {
 		},
 	}
 
-	if got := GetTaxonomiPathJoined(detail); got != "vehicles" {
-		t.Errorf("GetTaxonomiPathJoined = %v, want vehicles", got)
+	if got := GetTaxonomyPathJoined(detail); got != "vehicles" {
+		t.Errorf("GetTaxonomyPathJoined = %v, want vehicles", got)
 	}
 }
 
@@ -148,7 +120,7 @@ func TestProductDetailsGetRejectsInvalidIDs(t *testing.T) {
 	}
 }
 
-func TestProducFromDataGetRejectsInvalidIDs(t *testing.T) {
+func TestProductFromDataGetRejectsInvalidIDs(t *testing.T) {
 	for _, id := range []any{nil, 123, map[string]any{"value": "123"}, ""} {
 		t.Run("id type", func(t *testing.T) {
 			data := map[string]any{
@@ -157,8 +129,8 @@ func TestProducFromDataGetRejectsInvalidIDs(t *testing.T) {
 				},
 			}
 
-			if _, err := ProducFromDataGet(data); err == nil {
-				t.Errorf("ProducFromDataGet(%#v) returned no error", id)
+			if _, err := ProductFromDataGet(data); err == nil {
+				t.Errorf("ProductFromDataGet(%#v) returned no error", id)
 			}
 		})
 	}

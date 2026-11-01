@@ -410,7 +410,7 @@ func FillEmpty() error {
 			return true
 		}
 
-		productUrl = model.ProductIDTolink(productIdStr)
+		productUrl = model.ProductIDToLink(productIdStr)
 
 		jsonData["URL"] = productUrl
 

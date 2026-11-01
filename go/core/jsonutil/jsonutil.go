@@ -1,3 +1,5 @@
+// Package jsonutil provides helpers for walking and decoding the untyped JSON
+// payloads returned by Facebook's GraphQL endpoints.
 package jsonutil
 
 import (
@@ -36,32 +38,43 @@ func Lookup(data any, path string) (any, bool) {
 	return current, true
 }
 
-// ExtractJsonFromBody parses either a single JSON object or newline-delimited JSON
+// ExtractJSONFromBody parses either a single JSON object or newline-delimited JSON
 // objects from a response body. It returns an empty slice when the body is empty or
 // does not start with an object.
-func ExtractJsonFromBody(body []byte) ([]any, error) {
-	jsonDatas := []any{}
-	// make sure the first byte is { (open curly brakets)
+func ExtractJSONFromBody(body []byte) ([]any, error) {
+	// A response body always starts with { when it contains JSON objects.
 	if len(body) == 0 || body[0] != '{' {
-		return jsonDatas, nil
+		return []any{}, nil
 	}
 
+	if jsonData, ok := decodeObject(body); ok {
+		return []any{jsonData}, nil
+	}
+
+	return decodeLines(body), nil
+}
+
+// decodeObject decodes body as a single JSON object.
+func decodeObject(body []byte) (any, bool) {
 	var jsonData any
-	if err := json.Unmarshal(body, &jsonData); err == nil {
-		jsonDatas = append(jsonDatas, jsonData)
-		return jsonDatas, nil
+	if err := json.Unmarshal(body, &jsonData); err != nil {
+		return nil, false
 	}
+	return jsonData, true
+}
 
+// decodeLines decodes each newline-delimited JSON object in body, skipping
+// lines that are not objects or do not parse.
+func decodeLines(body []byte) []any {
+	jsonDatas := []any{}
 	var lineData any
 	for line := range strings.SplitSeq(string(body), "\n") {
 		if len(line) == 0 || line[0] != '{' {
 			continue
 		}
-		lineByte := []byte(line)
-		if err := json.Unmarshal(lineByte, &lineData); err == nil {
+		if err := json.Unmarshal([]byte(line), &lineData); err == nil {
 			jsonDatas = append(jsonDatas, lineData)
 		}
 	}
-
-	return jsonDatas, nil
+	return jsonDatas
 }

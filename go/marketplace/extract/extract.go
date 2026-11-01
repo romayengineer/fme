@@ -3,21 +3,27 @@ package extract
 
 import (
 	"errors"
+	"slices"
 	"strings"
 
 	"github.com/romayengineer/fme/go/core/jsonutil"
 	"github.com/romayengineer/fme/go/marketplace/model"
 )
 
+// ProductExtractor pairs a payload validator with the extractor that knows how
+// to read that payload shape.
 type ProductExtractor struct {
 	validator func(data any) bool
 	extractor func(data any) ([]model.MarketplaceItemDetails, error)
 }
 
+// ProductExtractors is the ordered set of payload shapes ProcessData can read.
 type ProductExtractors struct {
 	extractors []ProductExtractor
 }
 
+// NewProductExtractors returns the extractors for every payload shape the
+// scraper persists (PDP, search feed, and entity data).
 func NewProductExtractors() ProductExtractors {
 	return ProductExtractors{
 		extractors: []ProductExtractor{
@@ -30,8 +36,8 @@ func NewProductExtractors() ProductExtractors {
 				extractor: ProductsFromSearchGet,
 			},
 			{
-				validator: ProducFromDataValid,
-				extractor: ProducFromDataGet,
+				validator: ProductFromDataValid,
+				extractor: ProductFromDataGet,
 			},
 		},
 	}
@@ -50,10 +56,10 @@ func (pe ProductExtractors) ExtractAll(data any) []model.MarketplaceItemDetails 
 	return nil
 }
 
+// IsErrorRateLimit reports whether the payload is Facebook's rate-limit error
+// response, which must not be persisted as if it were a listing.
 func IsErrorRateLimit(data any) bool {
-	errors := jsonutil.GetKey(data, "errors")
-
-	errorsList, ok := errors.([]any)
+	errorsList, ok := jsonutil.GetKey(data, "errors").([]any)
 	if !ok {
 		return false
 	}
@@ -67,7 +73,6 @@ func IsErrorRateLimit(data any) bool {
 		if strings.EqualFold(message, "rate limit exceeded") {
 			return true
 		}
-
 	}
 
 	return false
@@ -104,29 +109,40 @@ func ProductDetailsValid(data any) bool {
 	return ok && id != ""
 }
 
-func GetTaxonomiPathJoined(detail any) any {
-	taxonomyPath := jsonutil.GetKey(detail, "marketplace_listing_renderable_target.seo_virtual_category.taxonomy_path")
+// GetTaxonomyPathJoined joins the listing's SEO category URLs into one
+// comma-separated value, or returns nil when the payload has no taxonomy path.
+func GetTaxonomyPathJoined(detail any) any {
+	taxonomyPathList, ok := jsonutil.GetKey(detail, "marketplace_listing_renderable_target.seo_virtual_category.taxonomy_path").([]any)
+	if !ok {
+		return nil
+	}
 
-	taxonomiNames := []string{}
-	taxonomyPathList, ok := taxonomyPath.([]any)
-	if ok {
-		for _, taxonomi := range taxonomyPathList {
-			taxonomiName, ok := jsonutil.GetKey(taxonomi, "seo_info.seo_url").(string)
-			if !ok || taxonomiName == "" {
-				continue
-			}
-			taxonomiNames = append(taxonomiNames, taxonomiName)
-		}
+	names := taxonomyNames(taxonomyPathList)
+	if len(names) == 0 {
+		return nil
 	}
-	var taxonomiPathJoined any
-	if len(taxonomiNames) == 0 {
-		taxonomiPathJoined = nil
-	} else {
-		taxonomiPathJoined = strings.Join(taxonomiNames, ",")
-	}
-	return taxonomiPathJoined
+	return strings.Join(names, ",")
 }
 
+// taxonomyNames collects the non-empty SEO URLs from taxonomy path entries.
+func taxonomyNames(entries []any) []string {
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if name, ok := taxonomyName(entry); ok {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// taxonomyName returns one taxonomy entry's SEO URL when it is a non-empty string.
+func taxonomyName(entry any) (string, bool) {
+	name, ok := jsonutil.GetKey(entry, "seo_info.seo_url").(string)
+	return name, ok && name != ""
+}
+
+// GetLocationAttrs reads the latitude, longitude, and reverse-geocoded city
+// attributes from a listing location payload.
 func GetLocationAttrs(location any) model.Location {
 	return model.Location{
 		LocationLatitud:          jsonutil.GetKey(location, "latitude"),
@@ -180,43 +196,32 @@ func ProductDetailsGet(data any) ([]model.MarketplaceItemDetails, error) {
 		return nil, errors.New("detail does not have a valid id")
 	}
 
-	var products []model.MarketplaceItemDetails
+	return []model.MarketplaceItemDetails{productDetailsFrom(detail, productID)}, nil
+}
 
-	productIdLong := jsonutil.GetKey(detail, "target.product_item.id")
-
+// productDetailsFrom maps one PDP detail object to the persisted listing.
+func productDetailsFrom(detail any, productID string) model.MarketplaceItemDetails {
 	productURL := jsonutil.GetKey(detail, "target.story.url")
 	if productURL == nil {
-		productURL = model.ProductIDTolink(productID)
+		productURL = model.ProductIDToLink(productID)
 	}
-	productTitle := jsonutil.GetKey(detail, "target.marketplace_listing_title")
-	productDescription := jsonutil.GetKey(detail, "target.redacted_description.text")
-	productPriceAmount := jsonutil.GetKey(detail, "target.listing_price.amount")
-	productPriceCurrency := jsonutil.GetKey(detail, "target.listing_price.currency")
-	productAttributeData := jsonutil.GetKey(detail, "target.attribute_data")
-	productCreation := jsonutil.GetKey(detail, "target.creation_time")
 
 	location := GetLocationAttrs(jsonutil.GetKey(detail, "marketplace_listing_renderable_target.location"))
 
-	taxonomiPathJoined := GetTaxonomiPathJoined(detail)
-
-	detailSellerId := jsonutil.GetKey(detail, "target.marketplace_listing_seller.id")
-	detailSellerName := jsonutil.GetKey(detail, "target.marketplace_listing_seller.name")
-	detailPhotos := GetPhotosURI(jsonutil.GetKey(detail, "target.listing_photos"))
-
-	marketplaceItemDetails := model.MarketplaceItemDetails{
+	return model.MarketplaceItemDetails{
 		ID:                       productID,
-		TaxonomiPathJoined:       taxonomiPathJoined,
-		IDLong:                   productIdLong,
+		TaxonomiPathJoined:       GetTaxonomyPathJoined(detail),
+		IDLong:                   jsonutil.GetKey(detail, "target.product_item.id"),
 		URL:                      productURL,
-		Title:                    productTitle,
-		Description:              productDescription,
-		PriceAmount:              productPriceAmount,
-		PriceCurrency:            productPriceCurrency,
-		AttributeData:            productAttributeData,
-		CreationTime:             productCreation,
-		SellerID:                 detailSellerId,
-		SellerName:               detailSellerName,
-		Photos:                   detailPhotos,
+		Title:                    jsonutil.GetKey(detail, "target.marketplace_listing_title"),
+		Description:              jsonutil.GetKey(detail, "target.redacted_description.text"),
+		PriceAmount:              jsonutil.GetKey(detail, "target.listing_price.amount"),
+		PriceCurrency:            jsonutil.GetKey(detail, "target.listing_price.currency"),
+		AttributeData:            jsonutil.GetKey(detail, "target.attribute_data"),
+		CreationTime:             jsonutil.GetKey(detail, "target.creation_time"),
+		SellerID:                 jsonutil.GetKey(detail, "target.marketplace_listing_seller.id"),
+		SellerName:               jsonutil.GetKey(detail, "target.marketplace_listing_seller.name"),
+		Photos:                   GetPhotosURI(jsonutil.GetKey(detail, "target.listing_photos")),
 		LocationLatitud:          location.LocationLatitud,
 		LocationLongitude:        location.LocationLongitude,
 		LocationGeocodeCityName1: location.LocationGeocodeCityName1,
@@ -224,55 +229,37 @@ func ProductDetailsGet(data any) ([]model.MarketplaceItemDetails, error) {
 		LocationGeocodeStateCode: location.LocationGeocodeStateCode,
 		LocationGeocodeCityID:    location.LocationGeocodeCityID,
 	}
-
-	products = append(products, marketplaceItemDetails)
-
-	return products, nil
 }
 
+// ProductsFromSearchValid reports whether the payload is a Marketplace search
+// feed that contains at least one listing with an id.
 func ProductsFromSearchValid(data any) bool {
-	edges := jsonutil.GetKey(data, "data.marketplace_search.feed_units.edges")
-	if edges == nil {
-		return false
-	}
-
-	edgesList, ok := edges.([]any)
+	edgesList, ok := jsonutil.GetKey(data, "data.marketplace_search.feed_units.edges").([]any)
 	if !ok {
 		return false
 	}
 
-	for _, edge := range edgesList {
-		listing := jsonutil.GetKey(edge, "node.listing")
-		if listing == nil {
-			continue
-		}
+	return slices.ContainsFunc(edgesList, searchEdgeHasID)
+}
 
-		if productID, ok := jsonutil.GetKey(listing, "id").(string); ok && productID != "" {
-			return true
-		}
+// searchEdgeHasID reports whether a search edge contains a listing id.
+func searchEdgeHasID(edge any) bool {
+	listing := jsonutil.GetKey(edge, "node.listing")
+	if listing == nil {
+		return false
 	}
 
-	return false
+	productID, ok := jsonutil.GetKey(listing, "id").(string)
+	return ok && productID != ""
 }
 
+// GetPhotoURI returns the encoded image URI from one listing photo. The value
+// is left escaped because re-marshaling the listing escapes it again.
 func GetPhotoURI(photo any) any {
-	uri := jsonutil.GetKey(photo, "image.uri")
-	return uri
-	// DO NOT UNSCAPE BECAUSE Marshall scapes it back
-	// if uri == nil {
-	// 	return nil
-	// }
-	// uriStr, ok := uri.(string)
-	// if !ok {
-	// 	return nil
-	// }
-	// unquoted, err := strconv.Unquote(uriStr)
-	// if err != nil {
-	// 	return uriStr
-	// }
-	// return unquoted
+	return jsonutil.GetKey(photo, "image.uri")
 }
 
+// GetPhotosURI returns the image URI of every photo, or nil for a non-list.
 func GetPhotosURI(photos any) any {
 	photosList, ok := photos.([]any)
 	if !ok {
@@ -285,6 +272,8 @@ func GetPhotosURI(photos any) any {
 	return photosListURIs
 }
 
+// ProductsFromSearchGet maps a Marketplace search feed payload to the listings
+// it contains.
 func ProductsFromSearchGet(data any) ([]model.MarketplaceItemDetails, error) {
 	edges := jsonutil.GetKey(data, "data.marketplace_search.feed_units.edges")
 	if edges == nil {
@@ -296,73 +285,63 @@ func ProductsFromSearchGet(data any) ([]model.MarketplaceItemDetails, error) {
 		return nil, errors.New("edges is not a list")
 	}
 
-	var products []model.MarketplaceItemDetails
-
+	products := make([]model.MarketplaceItemDetails, 0, len(edgesList))
 	for _, edge := range edgesList {
-		listing := jsonutil.GetKey(edge, "node.listing")
-		if listing == nil {
-			continue
+		if listing, ok := searchListingFromEdge(edge); ok {
+			products = append(products, listing)
 		}
-
-		productID, ok := jsonutil.GetKey(listing, "id").(string)
-		if !ok || productID == "" {
-			continue
-		}
-
-		productURL := model.ProductIDTolink(productID)
-
-		title := jsonutil.GetKey(listing, "marketplace_listing_title")
-		price := jsonutil.GetKey(listing, "listing_price.amount")
-		time := jsonutil.GetKey(listing, "if_gk_just_listed_tag_on_search_feed.creation_time")
-
-		isHidden := jsonutil.GetKey(listing, "is_hidden")
-		isLive := jsonutil.GetKey(listing, "is_live")
-		isPending := jsonutil.GetKey(listing, "is_pending")
-		isSold := jsonutil.GetKey(listing, "is_sold")
-
-		location := GetLocationAttrs(jsonutil.GetKey(listing, "location"))
-
-		sellerId := jsonutil.GetKey(listing, "marketplace_listing_seller.id")
-		sellerName := jsonutil.GetKey(listing, "marketplace_listing_seller.name")
-
-		photoPrimary := GetPhotoURI(jsonutil.GetKey(listing, "primary_listing_photo"))
-
-		productDeliveryTypes := jsonutil.GetKey(listing, "delivery_types")
-
-		marketplaceItemDetails := model.MarketplaceItemDetails{
-			ID:                       productID,
-			URL:                      productURL,
-			Title:                    title,
-			CreationTime:             time,
-			PriceAmount:              price,
-			LocationLatitud:          location.LocationLatitud,
-			LocationLongitude:        location.LocationLongitude,
-			LocationGeocodeCityName1: location.LocationGeocodeCityName1,
-			LocationGeocodeCityName2: location.LocationGeocodeCityName2,
-			LocationGeocodeStateCode: location.LocationGeocodeStateCode,
-			LocationGeocodeCityID:    location.LocationGeocodeCityID,
-			SellerID:                 sellerId,
-			SellerName:               sellerName,
-			PhotoPrimary:             photoPrimary,
-			DeliveryTypes:            productDeliveryTypes,
-			IsHidden:                 isHidden,
-			IsLive:                   isLive,
-			IsPending:                isPending,
-			IsSold:                   isSold,
-		}
-
-		products = append(products, marketplaceItemDetails)
 	}
 
 	return products, nil
 }
 
-func ProducFromDataValid(data any) bool {
+// searchListingFromEdge maps one search feed edge to a listing, dropping edges
+// without a valid listing id.
+func searchListingFromEdge(edge any) (model.MarketplaceItemDetails, bool) {
+	listing := jsonutil.GetKey(edge, "node.listing")
+	if listing == nil {
+		return model.MarketplaceItemDetails{}, false
+	}
+
+	productID, ok := jsonutil.GetKey(listing, "id").(string)
+	if !ok || productID == "" {
+		return model.MarketplaceItemDetails{}, false
+	}
+
+	location := GetLocationAttrs(jsonutil.GetKey(listing, "location"))
+
+	return model.MarketplaceItemDetails{
+		ID:                       productID,
+		URL:                      model.ProductIDToLink(productID),
+		Title:                    jsonutil.GetKey(listing, "marketplace_listing_title"),
+		CreationTime:             jsonutil.GetKey(listing, "if_gk_just_listed_tag_on_search_feed.creation_time"),
+		PriceAmount:              jsonutil.GetKey(listing, "listing_price.amount"),
+		LocationLatitud:          location.LocationLatitud,
+		LocationLongitude:        location.LocationLongitude,
+		LocationGeocodeCityName1: location.LocationGeocodeCityName1,
+		LocationGeocodeCityName2: location.LocationGeocodeCityName2,
+		LocationGeocodeStateCode: location.LocationGeocodeStateCode,
+		LocationGeocodeCityID:    location.LocationGeocodeCityID,
+		SellerID:                 jsonutil.GetKey(listing, "marketplace_listing_seller.id"),
+		SellerName:               jsonutil.GetKey(listing, "marketplace_listing_seller.name"),
+		PhotoPrimary:             GetPhotoURI(jsonutil.GetKey(listing, "primary_listing_photo")),
+		DeliveryTypes:            jsonutil.GetKey(listing, "delivery_types"),
+		IsHidden:                 jsonutil.GetKey(listing, "is_hidden"),
+		IsLive:                   jsonutil.GetKey(listing, "is_live"),
+		IsPending:                jsonutil.GetKey(listing, "is_pending"),
+		IsSold:                   jsonutil.GetKey(listing, "is_sold"),
+	}, true
+}
+
+// ProductFromDataValid reports whether the payload is an entity-data response
+// that contains an entity id.
+func ProductFromDataValid(data any) bool {
 	id, ok := jsonutil.GetKey(data, "data.node.entity_id").(string)
 	return ok && id != ""
 }
 
-func ProducFromDataGet(data any) ([]model.MarketplaceItemDetails, error) {
+// ProductFromDataGet maps an entity-data payload to the listing it describes.
+func ProductFromDataGet(data any) ([]model.MarketplaceItemDetails, error) {
 	node := jsonutil.GetKey(data, "data.node")
 	if node == nil {
 		return nil, errors.New("data node not found")
@@ -373,44 +352,30 @@ func ProducFromDataGet(data any) ([]model.MarketplaceItemDetails, error) {
 		return nil, errors.New("product does not have a valid id")
 	}
 
-	var products []model.MarketplaceItemDetails
-
-	productIdLong := jsonutil.GetKey(node, "data.product_item_id")
-
-	productTitle := jsonutil.GetKey(node, "data.title")
-
 	productCategory := jsonutil.GetKey(node, "data.upsell_type")
 
-	// do not save this caterogy
-	if productCategory != nil && productCategory == "CATEGORY_MISCELLANEOUS_UPSELL" {
+	// The miscellaneous upsell category is noise, not a real product category.
+	if productCategory == "CATEGORY_MISCELLANEOUS_UPSELL" {
 		productCategory = nil
 	}
 
-	productURL := model.ProductIDTolink(productID)
-
-	productPriceCurrency := jsonutil.GetKey(node, "data.price.currency")
-
 	location := GetLocationAttrs(jsonutil.GetKey(node, "entity.location"))
 
-	productCreation := jsonutil.GetKey(node, "listing.creation_time")
-
-	marketplaceItemDetails := model.MarketplaceItemDetails{
+	listing := model.MarketplaceItemDetails{
 		ID:                       productID,
-		URL:                      productURL,
-		IDLong:                   productIdLong,
+		URL:                      model.ProductIDToLink(productID),
+		IDLong:                   jsonutil.GetKey(node, "data.product_item_id"),
 		Category:                 productCategory,
-		Title:                    productTitle,
-		PriceCurrency:            productPriceCurrency,
+		Title:                    jsonutil.GetKey(node, "data.title"),
+		PriceCurrency:            jsonutil.GetKey(node, "data.price.currency"),
 		LocationLatitud:          location.LocationLatitud,
 		LocationLongitude:        location.LocationLongitude,
 		LocationGeocodeCityName1: location.LocationGeocodeCityName1,
 		LocationGeocodeCityName2: location.LocationGeocodeCityName2,
 		LocationGeocodeStateCode: location.LocationGeocodeStateCode,
 		LocationGeocodeCityID:    location.LocationGeocodeCityID,
-		CreationTime:             productCreation,
+		CreationTime:             jsonutil.GetKey(node, "listing.creation_time"),
 	}
 
-	products = append(products, marketplaceItemDetails)
-
-	return products, nil
+	return []model.MarketplaceItemDetails{listing}, nil
 }

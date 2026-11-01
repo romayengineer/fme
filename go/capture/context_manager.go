@@ -174,9 +174,9 @@ func (ceh *ContextEventHandlers) handleResponse(resp playwright.Response) {
 		logging.LogError0("OnResponse", "Error resp.Body()", "error", err)
 		return
 	}
-	jsonDatas, err := jsonutil.ExtractJsonFromBody(body)
+	jsonDatas, err := jsonutil.ExtractJSONFromBody(body)
 	if err != nil {
-		logging.LogError0("OnResponse", "Error ExtractJsonFromBody()", "error", err)
+		logging.LogError0("OnResponse", "Error ExtractJSONFromBody()", "error", err)
 		return
 	}
 

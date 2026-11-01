@@ -133,7 +133,7 @@ func FetchPDP(page driver.PageWrapperInterface, template *PDPTemplate, productId
 	}
 
 	postDataMap := template.PostDataMap.Clone()
-	if err := postDataMap.SetJsonString("variables", "targetId", productId); err != nil {
+	if err := postDataMap.SetJSONString("variables", "targetId", productId); err != nil {
 		return PDPOutcome{}, fmt.Errorf("error setting targetId: %w", err)
 	}
 
@@ -171,9 +171,9 @@ func FetchPDP(page driver.PageWrapperInterface, template *PDPTemplate, productId
 	}
 
 	body := []byte(strings.TrimPrefix(bodyStr, "for (;;);"))
-	jsonDatas, err := jsonutil.ExtractJsonFromBody(body)
+	jsonDatas, err := jsonutil.ExtractJSONFromBody(body)
 	if err != nil {
-		return PDPOutcome{}, fmt.Errorf("error ExtractJsonFromBody: %w", err)
+		return PDPOutcome{}, fmt.Errorf("error ExtractJSONFromBody: %w", err)
 	}
 
 	if slices.ContainsFunc(jsonDatas, extract.IsErrorRateLimit) {
