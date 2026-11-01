@@ -109,6 +109,26 @@ if command -v sqlite3 >/dev/null 2>&1; then
             fail "no Facebook login in $user_data_dir"
             fix "log into facebook.com in Chrome, then: just sync-profile"
         fi
+
+        # `just sync-profile` copies Chrome's Default profile unless pinned, so
+        # report whether that source still holds the login.
+        chome="${FME_CHROME_SRC:-}"
+        if [ -z "$chome" ]; then
+            case "$(uname -s)" in
+                Darwin) chome="$HOME/Library/Application Support/Google/Chrome" ;;
+                Linux) chome="${XDG_CONFIG_HOME:-$HOME/.config}/google-chrome" ;;
+            esac
+        fi
+        src_profile="${FME_PROFILE_NAME:-$(sed -n 's/^FME_PROFILE_NAME=//p' "$env_file" 2>/dev/null | tail -1)}"
+        src_profile="${src_profile:-${profile_directory:-Default}}"
+        if [ -n "$chome" ] && [ -d "$chome/$src_profile" ]; then
+            if has_fb_session "$chome/$src_profile"; then
+                pass "sync source '$src_profile' in Chrome has a Facebook login"
+            elif [ -n "$user_data_dir" ] && has_fb_session "$user_data_dir/${profile_directory:-Default}"; then
+                warn "sync source '$src_profile' in Chrome has no Facebook login; 'just sync-profile' will copy a logged-out profile"
+                fix "log into facebook.com in Chrome's '$src_profile' profile, or pin another: just sync-profile --profile \"Profile 9\""
+            fi
+        fi
     elif [ -n "$user_data_dir" ]; then
         fail "profile dir does not exist: $user_data_dir"
         fix "just setup"

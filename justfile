@@ -1,4 +1,5 @@
 set shell := ["bash", "-cu"]
+set positional-arguments := true
 
 binary := "fme"
 cmd := "go/cmd/fme"
@@ -13,11 +14,11 @@ default:
 setup *args:
     @./scripts/setup.sh {{args}}
 
-# Copy the logged-in Chrome profile into the fme profile. Run it any time the
-# scraped session expires; `search`, `pull-description`, `get-details` and `run`
-# also do this automatically before starting. See `just sync-profile --help`.
+# Copy the Chrome profile into the fme profile. Run it any time the scraped
+# session expires; `search`, `pull-description`, `get-details` and `run` also do
+# this automatically before starting. See `just sync-profile --help`.
 sync-profile *args:
-    @./scripts/sync-profile.sh {{args}}
+    @./scripts/sync-profile.sh "$@"
 
 # Internal: quiet profile refresh that is a no-op when the copy is still fresh.
 _sync-profile:

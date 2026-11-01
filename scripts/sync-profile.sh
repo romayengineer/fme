@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
 #
-# Copy the Chrome profile that holds a Facebook session into the profile the
-# scraper drives. Run it manually whenever the copied session expires, or let
-# `just` run it automatically before every scrape (`--auto`).
+# Copy a Chrome profile into the profile the scraper drives. Run it manually
+# whenever the copied session expires, or let `just` run it automatically before
+# every scrape (`--auto`).
 #
-# The source profile is auto-detected: the profile named by --profile /
-# FME_PROFILE_NAME when it has a login, otherwise the Chrome profile whose
-# cookie store contains c_user/xs (most recently written wins, Default breaks
-# ties). The destination always stays the profile .env points at, so a refresh
-# never invalidates .env.
+# The source is the profile named by --profile / FME_PROFILE_NAME, and `Default`
+# when neither is set. The copy happens even when the source is logged out; it
+# only warns. The destination always stays the profile .env points at, so a
+# refresh never invalidates .env. `--detect` opts into picking the Chrome
+# profile that actually holds a Facebook login instead.
 #
-# Usage: just sync-profile [--dry-run] [--force] [--profile NAME]
-#                          [--source DIR] [--dest DIR]
+# Usage: just sync-profile [--dry-run] [--profile NAME]
+#                          [--source DIR] [--dest DIR] [--detect]
 #        just sync-profile --auto        # quiet, skip when already fresh
 #
 # Configuration (environment variables, all optional):
 #   FME_CHROME_SRC       Chrome user-data dir to copy from
-#   FME_PROFILE_NAME     Chrome profile name to prefer as the source
+#   FME_PROFILE_NAME     Chrome profile name to copy (default: Default)
 #   FME_CHROME_DIR       Destination user-data dir (default: .env / fme-chrome)
 set -euo pipefail
 
@@ -27,27 +27,28 @@ IF_NEEDED=0
 QUIET=0
 AUTO=0
 DRY_RUN=0
-FORCE=0
+DETECT=0
 CLI_SOURCE=""
 CLI_PROFILE=""
 CLI_DEST=""
 
 usage() {
     cat <<'EOF'
-Copy the logged-in Chrome profile into the profile the scraper drives.
+Copy a Chrome profile into the profile the scraper drives.
 
 Usage: just sync-profile [options]
 
 Options:
-  --profile NAME   Chrome profile to copy from (default: auto-detect the one
-                   with a Facebook session)
+  --profile NAME   Chrome profile to copy (default: FME_PROFILE_NAME, else Default)
+  --detect         Copy whichever Chrome profile currently has a Facebook login
   --source DIR     Chrome user-data dir (default: FME_CHROME_SRC or the OS path)
   --dest DIR       Destination user-data dir (default: .env FME_USER_DATA_DIR)
-  --if-needed      Skip when the copy is fresh and still logged in
+  --if-needed      Skip when the copy is fresh (source unchanged since last sync)
   --auto           --if-needed --quiet, and never fail (used by `just search` etc.)
-  --force          Copy even when the source has no Facebook login
   --dry-run        Show what would happen, change nothing
   -h, --help       Show this help
+
+The copy runs even when the source profile is logged out; it only warns.
 
 Environment: FME_CHROME_SRC, FME_PROFILE_NAME, FME_CHROME_DIR
 EOF
@@ -61,7 +62,8 @@ while [ "$#" -gt 0 ]; do
         --dest) [ "$#" -ge 2 ] || { echo "missing value for --dest" >&2; exit 1; }; CLI_DEST="$2"; shift 2 ;;
         --if-needed) IF_NEEDED=1; shift ;;
         --auto) AUTO=1; IF_NEEDED=1; QUIET=1; shift ;;
-        --force|-f) FORCE=1; shift ;;
+        --detect) DETECT=1; shift ;;
+        --force|-f) shift ;;  # kept for compatibility; copying no longer needs it
         --dry-run) DRY_RUN=1; shift ;;
         -h|--help) usage 0 ;;
         *) echo "unknown option: $1" >&2; usage 1 ;;
@@ -97,13 +99,14 @@ esac
 
 env_dest="$(env_value FME_USER_DATA_DIR)"
 env_dest_profile="$(env_value FME_PROFILE_DIRECTORY)"
+env_profile_name="$(env_value FME_PROFILE_NAME)"
 env_user="$(env_value FME_USERNAME)"
 env_pass="$(env_value FME_PASSWORD)"
 
 SRC="${CLI_SOURCE:-${FME_CHROME_SRC:-$default_chrome_src}}"
 DEST="${CLI_DEST:-${FME_CHROME_DIR:-${env_dest:-$HOME/.local/share/fme-chrome}}}"
 DEST_PROFILE="${env_dest_profile:-Default}"
-PREFER_PROFILE="${CLI_PROFILE:-${FME_PROFILE_NAME:-}}"
+PREFER_PROFILE="${CLI_PROFILE:-${FME_PROFILE_NAME:-$env_profile_name}}"
 MARKER="$DEST/.fme-setup"
 
 if [ -z "$DEST" ] || [ -z "$DEST_PROFILE" ]; then
@@ -190,22 +193,11 @@ real_profiles() {
     shopt -u nullglob
 }
 
-SOURCE_PROFILE=""
+SOURCE_PROFILE="${PREFER_PROFILE:-$DEST_PROFILE}"
 
-# 1. An explicitly requested profile wins when it actually has a session.
-if [ -n "$PREFER_PROFILE" ]; then
-    if [ -d "$SRC/$PREFER_PROFILE" ] && has_fb_session "$SRC/$PREFER_PROFILE"; then
-        SOURCE_PROFILE="$PREFER_PROFILE"
-    elif [ -d "$SRC/$PREFER_PROFILE" ]; then
-        warn "'$PREFER_PROFILE' has no Facebook login; looking for another profile"
-    else
-        warn "profile '$PREFER_PROFILE' not found in $SRC"
-    fi
-fi
-
-# 2. Otherwise scan: logged-in profiles only, newest cookie write wins and
-#    Default breaks ties.
-if [ -z "$SOURCE_PROFILE" ]; then
+# --detect opts into the old behaviour: prefer Default when it has a login,
+# otherwise the logged-in profile whose cookies were written most recently.
+if [ "$DETECT" -eq 1 ]; then
     best=""
     best_mtime=-1
     default_found=0
@@ -229,31 +221,16 @@ if [ -z "$SOURCE_PROFILE" ]; then
     elif [ -n "$best" ]; then
         SOURCE_PROFILE="$best"
         if [ "$count" -gt 1 ]; then
-            warn "several profiles have a Facebook login; using '$best' (override with --profile)"
+            warn "several profiles have a Facebook login; using '$best' (pin one with --profile)"
             printf '%s' "$candidates" >&2
         fi
+    else
+        warn "no Chrome profile has a Facebook login; using '$SOURCE_PROFILE' anyway"
     fi
 fi
 
-if [ -z "$SOURCE_PROFILE" ]; then
-    # A forced copy is allowed to seed a profile before the first login.
-    if [ "$FORCE" -eq 1 ] && [ -n "$PREFER_PROFILE" ] && [ -d "$SRC/$PREFER_PROFILE" ]; then
-        SOURCE_PROFILE="$PREFER_PROFILE"
-    elif [ "$AUTO" -eq 1 ]; then
-        # Keep the existing copy; the scraper reports the login problem itself.
-        exit 0
-    else
-        printf '\n\033[31merror:\033[0m no Chrome profile in %s has a Facebook login.\n\n' "$SRC" >&2
-        echo "Log into Facebook once, then re-run 'just sync-profile':" >&2
-        echo "  1. open Chrome and sign in at https://www.facebook.com" >&2
-        echo "  2. just sync-profile" >&2
-        echo >&2
-        echo "Profiles found:" >&2
-        found="$(real_profiles)"
-        if [ -n "$found" ]; then printf '%s\n' "$found" | sed 's/^/        - /' >&2; else echo "        (none)" >&2; fi
-        exit 1
-    fi
-fi
+[ -d "$SRC/$SOURCE_PROFILE" ] \
+    || die "profile '$SOURCE_PROFILE' not found in $SRC (pick one with --profile)"
 
 SOURCE_PROFILE_DIR="$SRC/$SOURCE_PROFILE"
 
@@ -281,8 +258,7 @@ if [ "$IF_NEEDED" -eq 1 ]; then
     if [ "$marker_profile" = "$DEST_PROFILE" ] \
         && [ "$marker_source" = "$SOURCE_PROFILE" ] \
         && [ -n "$marker_epoch" ] \
-        && [ "${source_mtime:-0}" -le "$marker_epoch" ] 2>/dev/null \
-        && has_fb_session "$DEST_PROFILE_DIR"; then
+        && [ "${source_mtime:-0}" -le "$marker_epoch" ] 2>/dev/null; then
         info "profile '$DEST_PROFILE' is up to date with '$SOURCE_PROFILE'; nothing to do"
         exit 0
     fi
@@ -301,10 +277,9 @@ info "source:      $SRC/$SOURCE_PROFILE ($( [ -n "$source_db" ] && printf '%s' "
 info "destination: $DEST_PROFILE_DIR"
 
 if [ "$DRY_RUN" -eq 1 ]; then
-    if has_fb_session "$SOURCE_PROFILE_DIR"; then
-        ok "dry run: would copy '$SOURCE_PROFILE' into '$DEST/$DEST_PROFILE'"
-    else
-        warn "dry run: '$SOURCE_PROFILE' has no Facebook login"
+    ok "dry run: would copy '$SOURCE_PROFILE' into '$DEST/$DEST_PROFILE'"
+    if ! has_fb_session "$SOURCE_PROFILE_DIR"; then
+        warn "dry run: '$SOURCE_PROFILE' has no Facebook login; the scraper will not be authenticated"
     fi
     exit 0
 fi
@@ -368,6 +343,6 @@ fi
 if [ "$(fb_cookie_count "$DEST_PROFILE_DIR")" -gt 0 ] 2>/dev/null; then
     ok "copied '$SOURCE_PROFILE' -> '$DEST/$DEST_PROFILE' (Facebook session present)"
 else
-    warn "copied '$SOURCE_PROFILE' -> '$DEST/$DEST_PROFILE', but no Facebook login was found there"
-    warn "log into facebook.com in Chrome, then run: just sync-profile"
+    warn "copied '$SOURCE_PROFILE' -> '$DEST/$DEST_PROFILE', but it has no Facebook login"
+    warn "log into facebook.com in that Chrome profile, then run: just sync-profile"
 fi

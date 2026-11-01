@@ -50,10 +50,11 @@ profile. Refresh the copy at any time with:
 just sync-profile
 ```
 
-It auto-detects the Chrome profile that holds the Facebook login (`c_user`/`xs` cookies),
-copies it into the profile `.env` points at, and refuses to overwrite a working copy when
-no logged-in profile is found. `--dry-run` shows what it would do, `--profile "Profile 9"`
-forces a specific source.
+It copies Chrome's `Default` profile into the profile `.env` points at (same name), so
+the source can be pinned with `--profile "Profile 9"` or `FME_PROFILE_NAME`, and
+`--detect` copies whichever profile currently holds a Facebook login instead. The copy
+runs even when the source is logged out; it just warns that the scraper will not be
+authenticated. `--dry-run` shows what it would do.
 
 `just search`, `just pull-description`, `just get-details` and `just run` also run it
 automatically (`--auto`: quiet, and a no-op while the copy is still fresh), so a scrape
@@ -127,8 +128,9 @@ machine keeps its own Chrome-profile path.
 Run `just doctor` first; it prints the exact fix for anything it finds.
 
 - **"not logged in (url: …)"** — the copied session expired. Log into Facebook in
-  Chrome, then `just sync-profile` (no need to quit Chrome; the scraper's own browser
-  must be closed).
+  Chrome's `Default` profile, then `just sync-profile` (no need to quit Chrome; the
+  scraper's own browser must be closed). Logged in somewhere else? Pin it:
+  `just sync-profile --profile "Profile 9"`.
 - **Profile dir is in use / launch fails** — close the browser using that profile; a
   stale `SingletonLock` in `~/.local/share/fme-chrome` blocks the launch.
 - **`pulled=0` / error `1675004`** — Facebook is throttling the account. Wait, then
