@@ -41,6 +41,24 @@ The Facebook session is the one piece of manual setup: open Chrome, log in once,
 run `just setup`. `setup` copies that profile into `~/.local/share/fme-chrome` so the
 scraper never touches (or fights with) your everyday Chrome profile.
 
+## Keeping the session fresh
+
+The copied session eventually expires, or you log into Facebook in a different Chrome
+profile. Refresh the copy at any time with:
+
+```bash
+just sync-profile
+```
+
+It auto-detects the Chrome profile that holds the Facebook login (`c_user`/`xs` cookies),
+copies it into the profile `.env` points at, and refuses to overwrite a working copy when
+no logged-in profile is found. `--dry-run` shows what it would do, `--profile "Profile 9"`
+forces a specific source.
+
+`just search`, `just pull-description`, `just get-details` and `just run` also run it
+automatically (`--auto`: quiet, and a no-op while the copy is still fresh), so a scrape
+picks up a re-login without any extra step.
+
 ## What `just setup` does
 
 1. Checks prerequisites (`go`, `just`, Chrome, `rsync`).
@@ -51,7 +69,8 @@ scraper never touches (or fights with) your everyday Chrome profile.
 5. Installs the Playwright driver and Chromium.
 
 Flags: `--force` (regenerate `.env`, keeping `.env.bak`), `--refresh-profile` (re-copy
-the Chrome profile), `--skip-deps`, `--skip-build`, `--skip-drivers`.
+the Chrome profile; `just sync-profile` does the same copy without touching anything
+else), `--skip-deps`, `--skip-build`, `--skip-drivers`.
 
 Overridable settings (env vars): `FME_CHROME_SRC`, `FME_PROFILE_NAME`,
 `FME_CHROME_DIR`. To target a different profile:
@@ -108,7 +127,8 @@ machine keeps its own Chrome-profile path.
 Run `just doctor` first; it prints the exact fix for anything it finds.
 
 - **"not logged in (url: …)"** — the copied session expired. Log into Facebook in
-  Chrome, quit Chrome, then `just setup --refresh-profile`.
+  Chrome, then `just sync-profile` (no need to quit Chrome; the scraper's own browser
+  must be closed).
 - **Profile dir is in use / launch fails** — close the browser using that profile; a
   stale `SingletonLock` in `~/.local/share/fme-chrome` blocks the launch.
 - **`pulled=0` / error `1675004`** — Facebook is throttling the account. Wait, then
@@ -130,7 +150,7 @@ go/store/filestore    data/ JSON store + extraction pipeline (ProcessData)
 go/store/db           PocketBase integration (serve, save)
 go/core/              Logging, JSON, codec, string utilities
 ml/                   Python price-prediction pipeline
-scripts/              setup.sh, doctor.sh
+scripts/              setup.sh, doctor.sh, sync-profile.sh
 ```
 
 ## Go architecture

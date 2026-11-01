@@ -13,6 +13,16 @@ default:
 setup *args:
     @./scripts/setup.sh {{args}}
 
+# Copy the logged-in Chrome profile into the fme profile. Run it any time the
+# scraped session expires; `search`, `pull-description`, `get-details` and `run`
+# also do this automatically before starting. See `just sync-profile --help`.
+sync-profile *args:
+    @./scripts/sync-profile.sh {{args}}
+
+# Internal: quiet profile refresh that is a no-op when the copy is still fresh.
+_sync-profile:
+    @./scripts/sync-profile.sh --auto
+
 # Diagnose a partial or broken setup (read-only; never changes anything)
 doctor:
     @./scripts/doctor.sh
@@ -55,15 +65,15 @@ install: build
     echo "installed $dest/{{binary}}"
 
 # Run the scraper with arbitrary flags, e.g. `just run -action=serve`
-run *args:
+run *args: _sync-profile
     go run ./{{cmd}} {{args}}
 
 # Search Marketplace for a keyword, e.g. `just search "macbook m1"`
-search keyword *args:
+search keyword *args: _sync-profile
     go run ./{{cmd}} -action=search -keywords="{{keyword}}" {{args}}
 
 # Pull descriptions for all details missing one (opens any listing to grab the PDP template)
-pull-description *args:
+pull-description *args: _sync-profile
     go run ./{{cmd}} -action=pull_description {{args}}
 
 # Remove duplicate PDP responses, keeping the newest per product id
@@ -71,7 +81,7 @@ dedupe-pdp:
     go run ./{{cmd}} -action=dedupe_pdp
 
 # Visit each known listing to fetch details
-get-details:
+get-details: _sync-profile
     go run ./{{cmd}} -action=get_details
 
 # Extract products from scraped responses into the database

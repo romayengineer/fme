@@ -107,7 +107,7 @@ if command -v sqlite3 >/dev/null 2>&1; then
             pass "profile 'Default' has a Facebook login"
         else
             fail "no Facebook login in $user_data_dir"
-            fix "log into facebook.com in Chrome, quit it, then: just setup --refresh-profile"
+            fix "log into facebook.com in Chrome, then: just sync-profile"
         fi
     elif [ -n "$user_data_dir" ]; then
         fail "profile dir does not exist: $user_data_dir"
