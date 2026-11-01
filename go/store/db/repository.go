@@ -17,38 +17,62 @@ import (
 // ErrNotFound reports that a product row does not exist.
 var ErrNotFound = errors.New("product not found")
 
+// productNumbers holds the converted numeric fields of a listing.
+type productNumbers struct {
+	priceAmount  float64
+	creationTime int64
+	latitude     float64
+	longitude    float64
+}
+
+// productNumericFields converts the listing's numeric JSON scalars.
+func productNumericFields(product model.MarketplaceItemDetails) (productNumbers, error) {
+	var nums productNumbers
+	var err error
+
+	if nums.priceAmount, err = toFloat(product.PriceAmount); err != nil {
+		return nums, fmt.Errorf("price_amount: %w", err)
+	}
+	if nums.creationTime, err = toInt64(product.CreationTime); err != nil {
+		return nums, fmt.Errorf("creation_time: %w", err)
+	}
+	if nums.latitude, err = toFloat(product.LocationLatitud); err != nil {
+		return nums, fmt.Errorf("location_latitude: %w", err)
+	}
+	if nums.longitude, err = toFloat(product.LocationLongitude); err != nil {
+		return nums, fmt.Errorf("location_longitude: %w", err)
+	}
+
+	return nums, nil
+}
+
+// SetProductFields maps a listing onto a PocketBase record.
 func SetProductFields(record *models.Record, product model.MarketplaceItemDetails) error {
 	if record == nil {
 		return errors.New("record is nil")
 	}
 
-	priceAmount, err := toFloat(product.PriceAmount)
+	nums, err := productNumericFields(product)
 	if err != nil {
-		return fmt.Errorf("price_amount: %w", err)
-	}
-	creationTime, err := toInt64(product.CreationTime)
-	if err != nil {
-		return fmt.Errorf("creation_time: %w", err)
-	}
-	latitude, err := toFloat(product.LocationLatitud)
-	if err != nil {
-		return fmt.Errorf("location_latitude: %w", err)
-	}
-	longitude, err := toFloat(product.LocationLongitude)
-	if err != nil {
-		return fmt.Errorf("location_longitude: %w", err)
+		return err
 	}
 
+	setProductRecord(record, product, nums)
+	return nil
+}
+
+// setProductRecord writes the listing fields onto a PocketBase record.
+func setProductRecord(record *models.Record, product model.MarketplaceItemDetails, nums productNumbers) {
 	record.Set("facebook_id_long", toString(product.IDLong))
 	record.Set("title", toStringClean(product.Title))
 	record.Set("description", toStringClean(product.Description))
 	record.Set("category", toString(product.Category))
 	record.Set("url", toString(product.URL))
-	record.Set("price_amount", priceAmount)
+	record.Set("price_amount", nums.priceAmount)
 	record.Set("price_currency", toString(product.PriceCurrency))
-	record.Set("creation_time", creationTime)
-	record.Set("location_latitude", latitude)
-	record.Set("location_longitude", longitude)
+	record.Set("creation_time", nums.creationTime)
+	record.Set("location_latitude", nums.latitude)
+	record.Set("location_longitude", nums.longitude)
 	record.Set("location_city_id", toString(product.LocationGeocodeCityID))
 	record.Set("location_city_name1", toString(product.LocationGeocodeCityName1))
 	record.Set("location_city_name2", toString(product.LocationGeocodeCityName2))
@@ -59,31 +83,10 @@ func SetProductFields(record *models.Record, product model.MarketplaceItemDetail
 	record.Set("is_live", toBool(product.IsLive))
 	record.Set("is_pending", toBool(product.IsPending))
 	record.Set("is_sold", toBool(product.IsSold))
-
-	return nil
 }
 
-func (db *PocketBaseDB) UpsertProduct(product model.MarketplaceItemDetails) (sql.Result, error) {
-	facebookID := toString(product.ID)
-
-	priceAmount, err := toFloat(product.PriceAmount)
-	if err != nil {
-		return nil, fmt.Errorf("price_amount: %w", err)
-	}
-	creationTime, err := toInt64(product.CreationTime)
-	if err != nil {
-		return nil, fmt.Errorf("creation_time: %w", err)
-	}
-	latitude, err := toFloat(product.LocationLatitud)
-	if err != nil {
-		return nil, fmt.Errorf("location_latitude: %w", err)
-	}
-	longitude, err := toFloat(product.LocationLongitude)
-	if err != nil {
-		return nil, fmt.Errorf("location_longitude: %w", err)
-	}
-
-	sql := `INSERT INTO products (
+// upsertProductSQL inserts a product or updates the row with the same facebook_id.
+const upsertProductSQL = `INSERT INTO products (
 		facebook_id, facebook_id_long, title, description, category, url,
 		price_amount, price_currency, creation_time, location_latitude,
 		location_longitude, location_city_id, location_city_name1,
@@ -116,18 +119,39 @@ func (db *PocketBaseDB) UpsertProduct(product model.MarketplaceItemDetails) (sql
 		is_pending = excluded.is_pending,
 		is_sold = excluded.is_sold`
 
-	result, err := db.app.Dao().DB().NewQuery(sql).Bind(map[string]any{
+// UpsertProduct inserts or updates the product row keyed by facebook_id.
+func (db *PocketBaseDB) UpsertProduct(product model.MarketplaceItemDetails) (sql.Result, error) {
+	facebookID := toString(product.ID)
+
+	nums, err := productNumericFields(product)
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := db.app.Dao().DB().NewQuery(upsertProductSQL).
+		Bind(productBindValues(product, facebookID, nums)).Execute()
+	if err != nil {
+		logging.LogError0("SaveProduct", "failed to upsert product", "facebook_id", facebookID, "error", err)
+		return result, err
+	}
+
+	return result, nil
+}
+
+// productBindValues builds the upsert query parameters for one product.
+func productBindValues(product model.MarketplaceItemDetails, facebookID string, nums productNumbers) map[string]any {
+	return map[string]any{
 		"facebook_id":         facebookID,
 		"facebook_id_long":    toString(product.IDLong),
 		"title":               toStringClean(product.Title),
 		"description":         toStringClean(product.Description),
 		"category":            toString(product.Category),
 		"url":                 toString(product.URL),
-		"price_amount":        priceAmount,
+		"price_amount":        nums.priceAmount,
 		"price_currency":      toString(product.PriceCurrency),
-		"creation_time":       creationTime,
-		"location_latitude":   latitude,
-		"location_longitude":  longitude,
+		"creation_time":       nums.creationTime,
+		"location_latitude":   nums.latitude,
+		"location_longitude":  nums.longitude,
 		"location_city_id":    toString(product.LocationGeocodeCityID),
 		"location_city_name1": toString(product.LocationGeocodeCityName1),
 		"location_city_name2": toString(product.LocationGeocodeCityName2),
@@ -138,15 +162,10 @@ func (db *PocketBaseDB) UpsertProduct(product model.MarketplaceItemDetails) (sql
 		"is_live":             toBool(product.IsLive),
 		"is_pending":          toBool(product.IsPending),
 		"is_sold":             toBool(product.IsSold),
-	}).Execute()
-	if err != nil {
-		logging.LogError0("SaveProduct", "failed to upsert product", "facebook_id", facebookID, "error", err)
-		return result, err
 	}
-
-	return result, nil
 }
 
+// GetProductID returns the PocketBase row id for the product's facebook_id.
 func (db *PocketBaseDB) GetProductID(product model.MarketplaceItemDetails) (string, error) {
 	facebookID := toString(product.ID)
 
@@ -168,6 +187,7 @@ func (db *PocketBaseDB) GetProductID(product model.MarketplaceItemDetails) (stri
 	return result.ID, nil
 }
 
+// SaveProduct upserts one product and returns its PocketBase row id.
 func (db *PocketBaseDB) SaveProduct(product model.MarketplaceItemDetails) (string, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -185,6 +205,8 @@ func (db *PocketBaseDB) SaveProduct(product model.MarketplaceItemDetails) (strin
 	return productID, nil
 }
 
+// SaveProducts saves every product and returns how many succeeded, joined with
+// the errors of the ones that failed.
 func (db *PocketBaseDB) SaveProducts(products []model.MarketplaceItemDetails) (int, error) {
 	count := 0
 	var errs []error
@@ -200,6 +222,7 @@ func (db *PocketBaseDB) SaveProducts(products []model.MarketplaceItemDetails) (i
 	return count, errors.Join(errs...)
 }
 
+// ProductExists reports whether a product with facebookID is already stored.
 func (db *PocketBaseDB) ProductExists(facebookID string) (bool, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
@@ -239,11 +262,19 @@ func toStringClean(v any) string {
 	return value
 }
 
+// toFloat converts a JSON scalar to float64, parsing numeric strings.
 func toFloat(v any) (float64, error) {
 	if v == nil {
 		return 0, nil
 	}
+	if str, ok := v.(string); ok {
+		return parseFloat(str)
+	}
+	return floatValue(v)
+}
 
+// floatValue converts a non-string numeric value to float64.
+func floatValue(v any) (float64, error) {
 	switch val := v.(type) {
 	case float64:
 		return val, nil
@@ -253,22 +284,32 @@ func toFloat(v any) (float64, error) {
 		return float64(val), nil
 	case int64:
 		return float64(val), nil
-	case string:
-		num, err := strconv.ParseFloat(val, 64)
-		if err != nil {
-			return 0, fmt.Errorf("parse %q as float: %w", val, err)
-		}
-		return num, nil
-	default:
-		return 0, fmt.Errorf("cannot convert %T to float64", v)
 	}
+	return 0, fmt.Errorf("cannot convert %T to float64", v)
 }
 
+// parseFloat parses a decimal string as float64.
+func parseFloat(str string) (float64, error) {
+	num, err := strconv.ParseFloat(str, 64)
+	if err != nil {
+		return 0, fmt.Errorf("parse %q as float: %w", str, err)
+	}
+	return num, nil
+}
+
+// toInt64 converts a JSON scalar to int64, parsing numeric strings.
 func toInt64(v any) (int64, error) {
 	if v == nil {
 		return 0, nil
 	}
+	if str, ok := v.(string); ok {
+		return parseInt64(str)
+	}
+	return intValue(v)
+}
 
+// intValue converts a non-string numeric value to int64.
+func intValue(v any) (int64, error) {
 	switch val := v.(type) {
 	case int64:
 		return val, nil
@@ -276,15 +317,17 @@ func toInt64(v any) (int64, error) {
 		return int64(val), nil
 	case float64:
 		return int64(val), nil
-	case string:
-		num, err := strconv.ParseInt(val, 10, 64)
-		if err != nil {
-			return 0, fmt.Errorf("parse %q as int64: %w", val, err)
-		}
-		return num, nil
-	default:
-		return 0, fmt.Errorf("cannot convert %T to int64", v)
 	}
+	return 0, fmt.Errorf("cannot convert %T to int64", v)
+}
+
+// parseInt64 parses a decimal string as int64.
+func parseInt64(str string) (int64, error) {
+	num, err := strconv.ParseInt(str, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("parse %q as int64: %w", str, err)
+	}
+	return num, nil
 }
 
 func toBool(v any) bool {

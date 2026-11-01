@@ -9,62 +9,106 @@ import (
 	"github.com/romayengineer/fme/go/store/pdpstate"
 )
 
-func writeDetail(t *testing.T, dir string, id string, description any) {
+// newDetailDir switches to a temporary working directory and creates the detail
+// directory inside it.
+func newDetailDir(t *testing.T) string {
 	t.Helper()
-	record := map[string]any{"ID": id, "Description": description}
+
+	t.Chdir(t.TempDir())
+	dir := filepath.Join(DataDir, "__Details")
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	return dir
+}
+
+// writeDetail writes one detail record fixture.
+func writeDetail(t *testing.T, dir, id string, description any) {
+	t.Helper()
+
+	writeDetailRecord(t, dir, id, map[string]any{"ID": id, "Description": description})
+}
+
+// writeDetailRecord writes an arbitrary detail record fixture.
+func writeDetailRecord(t *testing.T, dir, id string, record map[string]any) {
+	t.Helper()
+
 	body, err := json.Marshal(record)
 	if err != nil {
 		t.Fatalf("marshal fixture: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "detail_"+id+".json"), body, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "detail_"+id+".json"), body, 0o600); err != nil {
 		t.Fatalf("write fixture: %v", err)
 	}
 }
 
-func TestComputeDescriptionStats(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Chdir(tmpDir)
+// readDetailRecord reads one detail record fixture.
+func readDetailRecord(t *testing.T, dir, id string) map[string]any {
+	t.Helper()
 
-	detailDir := filepath.Join(DataDir, "__Details")
-	if err := os.MkdirAll(detailDir, 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
+	body, err := os.ReadFile(filepath.Join(dir, "detail_"+id+".json")) //nolint:gosec // temp test path.
+	if err != nil {
+		t.Fatalf("read detail: %v", err)
 	}
+
+	var record map[string]any
+	if err := json.Unmarshal(body, &record); err != nil {
+		t.Fatalf("unmarshal detail: %v", err)
+	}
+	return record
+}
+
+// mustComputeStats computes the description stats or fails the test.
+func mustComputeStats(t *testing.T) DescriptionStats {
+	t.Helper()
+
+	stats, err := ComputeDescriptionStats()
+	if err != nil {
+		t.Fatalf("ComputeDescriptionStats: %v", err)
+	}
+	return stats
+}
+
+// assertStatsCounts checks the integer counters of a stats report.
+func assertStatsCounts(t *testing.T, stats DescriptionStats, total, empty, withDescription int) {
+	t.Helper()
+
+	if stats.Total != total {
+		t.Errorf("Total = %d, want %d", stats.Total, total)
+	}
+	if stats.Empty != empty {
+		t.Errorf("Empty = %d, want %d", stats.Empty, empty)
+	}
+	if stats.WithDescription != withDescription {
+		t.Errorf("WithDescription = %d, want %d", stats.WithDescription, withDescription)
+	}
+}
+
+// assertPercent checks one percentage field of a stats report.
+func assertPercent(t *testing.T, name string, got, want float64) {
+	t.Helper()
+
+	if got != want {
+		t.Errorf("%s = %v, want %v", name, got, want)
+	}
+}
+
+func TestComputeDescriptionStats(t *testing.T) {
+	detailDir := newDetailDir(t)
 
 	writeDetail(t, detailDir, "1", "a real description")
 	writeDetail(t, detailDir, "2", "")
 	writeDetail(t, detailDir, "3", nil)
 	writeDetail(t, detailDir, "4", nil)
 
-	stats, err := ComputeDescriptionStats()
-	if err != nil {
-		t.Fatalf("ComputeDescriptionStats: %v", err)
-	}
-
-	if stats.Total != 4 {
-		t.Errorf("Total = %d, want 4", stats.Total)
-	}
-	if stats.Empty != 2 {
-		t.Errorf("Empty = %d, want 2", stats.Empty)
-	}
-	if stats.WithDescription != 2 {
-		t.Errorf("WithDescription = %d, want 2", stats.WithDescription)
-	}
-	if got := stats.EmptyPercent(); got != 50 {
-		t.Errorf("EmptyPercent = %v, want 50", got)
-	}
-	if got := stats.WithDescriptionPercent(); got != 50 {
-		t.Errorf("WithDescriptionPercent = %v, want 50", got)
-	}
+	stats := mustComputeStats(t)
+	assertStatsCounts(t, stats, 4, 2, 2)
+	assertPercent(t, "EmptyPercent", stats.EmptyPercent(), 50)
+	assertPercent(t, "WithDescriptionPercent", stats.WithDescriptionPercent(), 50)
 }
 
 func TestComputeDescriptionStatsUnavailable(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Chdir(tmpDir)
-
-	detailDir := filepath.Join(DataDir, "__Details")
-	if err := os.MkdirAll(detailDir, 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
+	detailDir := newDetailDir(t)
 
 	writeDetail(t, detailDir, "1", "a real description")
 	writeDetail(t, detailDir, "2", nil)
@@ -73,33 +117,15 @@ func TestComputeDescriptionStatsUnavailable(t *testing.T) {
 		t.Fatalf("MarkUnavailable: %v", err)
 	}
 
-	stats, err := ComputeDescriptionStats()
-	if err != nil {
-		t.Fatalf("ComputeDescriptionStats: %v", err)
-	}
-
-	if stats.Total != 2 {
-		t.Errorf("Total = %d, want 2", stats.Total)
-	}
+	stats := mustComputeStats(t)
+	assertStatsCounts(t, stats, 2, 0, 1)
 	if stats.Unavailable != 1 {
 		t.Errorf("Unavailable = %d, want 1", stats.Unavailable)
-	}
-	if stats.Empty != 0 {
-		t.Errorf("Empty = %d, want 0 (deleted listings are not empty)", stats.Empty)
-	}
-	if stats.WithDescription != 1 {
-		t.Errorf("WithDescription = %d, want 1", stats.WithDescription)
 	}
 }
 
 func TestPendingDescriptionCount(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Chdir(tmpDir)
-
-	detailDir := filepath.Join(DataDir, "__Details")
-	if err := os.MkdirAll(detailDir, 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
+	detailDir := newDetailDir(t)
 
 	writeDetail(t, detailDir, "1", "has text")
 	writeDetail(t, detailDir, "2", "")  // empty string counts as done
@@ -121,25 +147,10 @@ func TestPendingDescriptionCount(t *testing.T) {
 }
 
 func TestComputeDescriptionStatsEmpty(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Chdir(tmpDir)
+	newDetailDir(t)
 
-	if err := os.MkdirAll(filepath.Join(DataDir, "__Details"), 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-
-	stats, err := ComputeDescriptionStats()
-	if err != nil {
-		t.Fatalf("ComputeDescriptionStats: %v", err)
-	}
-
-	if stats.Total != 0 {
-		t.Errorf("Total = %d, want 0", stats.Total)
-	}
-	if got := stats.EmptyPercent(); got != 0 {
-		t.Errorf("EmptyPercent = %v, want 0", got)
-	}
-	if got := stats.WithDescriptionPercent(); got != 0 {
-		t.Errorf("WithDescriptionPercent = %v, want 0", got)
-	}
+	stats := mustComputeStats(t)
+	assertStatsCounts(t, stats, 0, 0, 0)
+	assertPercent(t, "EmptyPercent", stats.EmptyPercent(), 0)
+	assertPercent(t, "WithDescriptionPercent", stats.WithDescriptionPercent(), 0)
 }

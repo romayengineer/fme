@@ -25,7 +25,7 @@ func (s *FileDetailStore) ForEachDetail(process func(filePath string, jsonData m
 }
 
 func (s *FileDetailStore) LoadPDPProductIDs() map[string]struct{} {
-	return filestore.LoadPDPProductIds()
+	return filestore.LoadPDPProductIDs()
 }
 
 func (s *FileDetailStore) PendingDescriptions(existing, unavailable map[string]struct{}) (pending, alreadyFetched, unavailableCount int, err error) {

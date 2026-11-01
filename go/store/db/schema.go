@@ -9,28 +9,52 @@ import (
 	"github.com/romayengineer/fme/go/core/logging"
 )
 
+// productField describes one column of the products collection.
+type productField struct {
+	name string
+	typ  string
+}
+
+// ensureProductsCollection creates the products collection when it is missing.
 func (db *PocketBaseDB) ensureProductsCollection() error {
-	// Try to find existing collection
 	if _, err := db.app.Dao().FindCollectionByNameOrId("products"); err == nil {
 		logging.LogDebug0("ensureProductsCollection", "products collection already exists")
 		return nil
 	}
 
 	logging.LogInfo0("ensureProductsCollection", "creating products collection")
-
-	// Create new collection
-	collection := &models.Collection{
-		Name: "products",
-		Type: "base",
+	if err := db.app.Dao().SaveCollection(productsCollection()); err != nil {
+		return fmt.Errorf("failed to create products collection: %w", err)
 	}
 
-	// Create schema with all fields
-	s := schema.Schema{}
+	logging.LogInfo0("ensureProductsCollection", "products collection created successfully")
+	return nil
+}
 
-	fields := []struct {
-		name string
-		typ  string
-	}{
+// productsCollection builds the products collection, its schema, and indexes.
+func productsCollection() *models.Collection {
+	collection := &models.Collection{
+		Name:   "products",
+		Type:   "base",
+		Schema: productsSchema(),
+	}
+	// A unique index on facebook_id keeps upserts fast and duplicate-free.
+	collection.Indexes = append(collection.Indexes, "CREATE UNIQUE INDEX IF NOT EXISTS `idx_facebook_id` ON `products` (facebook_id)")
+	return collection
+}
+
+// productsSchema builds the schema from the field list.
+func productsSchema() schema.Schema {
+	s := schema.Schema{}
+	for _, f := range productFields() {
+		s.AddField(&schema.SchemaField{Name: f.name, Type: f.typ})
+	}
+	return s
+}
+
+// productFields lists every column persisted for a product.
+func productFields() []productField {
+	return []productField{
 		{"facebook_id", "text"},
 		{"facebook_id_long", "text"},
 		{"title", "text"},
@@ -53,24 +77,4 @@ func (db *PocketBaseDB) ensureProductsCollection() error {
 		{"is_pending", "bool"},
 		{"is_sold", "bool"},
 	}
-
-	for _, f := range fields {
-		s.AddField(&schema.SchemaField{
-			Name: f.name,
-			Type: f.typ,
-		})
-	}
-
-	collection.Schema = s
-
-	// Add Unique index on facebook_id for fast lookups
-	collection.Indexes = append(collection.Indexes, "CREATE UNIQUE INDEX IF NOT EXISTS `idx_facebook_id` ON `products` (facebook_id)")
-
-	// Save the collection to database
-	if err := db.app.Dao().SaveCollection(collection); err != nil {
-		return fmt.Errorf("failed to create products collection: %w", err)
-	}
-
-	logging.LogInfo0("ensureProductsCollection", "products collection created successfully")
-	return nil
 }

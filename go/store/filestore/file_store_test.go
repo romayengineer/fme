@@ -11,14 +11,17 @@ import (
 	"github.com/romayengineer/fme/go/marketplace/model"
 )
 
+// newTestStore returns a product store rooted at dir.
+func newTestStore(dir, productID string) FileStore[model.MarketplaceItemDetails] {
+	store := NewProductFileStore(productID)
+	store.SetDir(dir)
+	return store
+}
+
 func TestFileStoreGet(t *testing.T) {
 	tmpDir := t.TempDir()
-
 	productID := uuid.New().String()
-	store := NewProductFileStore(productID)
-	store.SetDir(tmpDir)
 
-	// Create test data
 	testData := model.MarketplaceItemDetails{
 		ID:            "123",
 		Title:         "Test Product",
@@ -29,16 +32,12 @@ func TestFileStoreGet(t *testing.T) {
 		SellerName:    "Test Seller",
 	}
 
-	_, err := store.Save(testData)
+	_, err := newTestStore(tmpDir, productID).Save(testData)
 	require.NoError(t, err)
 
-	store2 := NewProductFileStore(productID)
-	store2.SetDir(tmpDir)
-
-	gotData, err := store2.Get()
+	gotData, err := newTestStore(tmpDir, productID).Get()
 	require.NoError(t, err)
-
-	assert.NotNil(t, gotData)
+	require.NotNil(t, gotData)
 
 	assert.Equal(t, testData.ID, gotData.ID)
 	assert.Equal(t, testData.Title, gotData.Title)
@@ -49,22 +48,19 @@ func TestFileStoreGet(t *testing.T) {
 	assert.Equal(t, testData.SellerName, gotData.SellerName)
 }
 
-func TestFileStoreSave(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	productID := uuid.New().String()
-
-	store := NewProductFileStore(productID)
-	store.SetDir(tmpDir)
-
-	data, err := store.Get()
-
-	assert.NoError(t, err)
-	assert.NotNil(t, data)
+func TestFileStoreSaveMissingFile(t *testing.T) {
+	data, err := newTestStore(t.TempDir(), uuid.New().String()).Get()
+	require.NoError(t, err)
+	require.NotNil(t, data)
 
 	assert.Nil(t, data.ID)
 	assert.Nil(t, data.Title)
 	assert.Nil(t, data.Description)
+}
+
+func TestFileStoreSavePersistsFields(t *testing.T) {
+	tmpDir := t.TempDir()
+	productID := uuid.New().String()
 
 	testData := model.MarketplaceItemDetails{
 		ID:          "123",
@@ -72,31 +68,30 @@ func TestFileStoreSave(t *testing.T) {
 		Description: "Test Description",
 	}
 
-	_, err = store.Save(testData)
-	assert.NoError(t, err)
+	_, err := newTestStore(tmpDir, productID).Save(testData)
+	require.NoError(t, err)
 
-	store2 := NewProductFileStore(productID)
-	store2.SetDir(tmpDir)
+	data, err := newTestStore(tmpDir, productID).Get()
+	require.NoError(t, err)
+	require.NotNil(t, data)
 
-	data2, err := store2.Get()
+	assert.Equal(t, testData.ID, data.ID)
+	assert.Equal(t, testData.Title, data.Title)
+	assert.Equal(t, testData.Description, data.Description)
+}
 
-	assert.NoError(t, err)
-	assert.NotNil(t, data2)
-
-	assert.Equal(t, testData.ID, data2.ID)
-	assert.Equal(t, testData.Title, data2.Title)
-	assert.Equal(t, testData.Description, data2.Description)
-
-	// update
+func TestFileStoreSaveUpdateOverwritesID(t *testing.T) {
+	tmpDir := t.TempDir()
+	productID := uuid.New().String()
+	store := newTestStore(tmpDir, productID)
 	newProductID := uuid.New().String()
-	testData.ID = newProductID
 
-	_, err = store2.Save(testData)
-	assert.NoError(t, err)
+	_, err := store.Save(model.MarketplaceItemDetails{ID: newProductID})
+	require.NoError(t, err)
 
-	data3, err := store2.Get()
-	assert.NoError(t, err)
-	assert.Equal(t, newProductID, data3.ID)
+	data, err := store.Get()
+	require.NoError(t, err)
+	assert.Equal(t, newProductID, data.ID)
 }
 
 func TestFileStoreConcurrentSavesPreserveFields(t *testing.T) {
@@ -111,35 +106,9 @@ func TestFileStoreConcurrentSavesPreserveFields(t *testing.T) {
 		{ID: "123", LocationGeocodeCityName1: "city"},
 	}
 
-	start := make(chan struct{})
-	errCh := make(chan error, len(patches))
-	var wg sync.WaitGroup
+	require.Empty(t, concurrentSaveErrors(tmpDir, productID, patches), "concurrent Save errors")
 
-	for _, patch := range patches {
-		wg.Add(1)
-		go func(patch model.MarketplaceItemDetails) {
-			defer wg.Done()
-			<-start
-
-			store := NewProductFileStore(productID)
-			store.SetDir(tmpDir)
-			if _, err := store.Save(patch); err != nil {
-				errCh <- err
-			}
-		}(patch)
-	}
-
-	close(start)
-	wg.Wait()
-	close(errCh)
-
-	for err := range errCh {
-		t.Errorf("concurrent Save: %v", err)
-	}
-
-	store := NewProductFileStore(productID)
-	store.SetDir(tmpDir)
-	got, err := store.Get()
+	got, err := newTestStore(tmpDir, productID).Get()
 	require.NoError(t, err)
 	require.NotNil(t, got)
 
@@ -148,4 +117,36 @@ func TestFileStoreConcurrentSavesPreserveFields(t *testing.T) {
 	assert.Equal(t, "USD", got.PriceCurrency)
 	assert.Equal(t, "seller", got.SellerName)
 	assert.Equal(t, "city", got.LocationGeocodeCityName1)
+}
+
+// concurrentSaveErrors saves every patch concurrently and returns the errors.
+func concurrentSaveErrors(dir, productID string, patches []model.MarketplaceItemDetails) []error {
+	start := make(chan struct{})
+	errCh := make(chan error, len(patches))
+	var wg sync.WaitGroup
+
+	for _, patch := range patches {
+		wg.Go(func() {
+			<-start
+			if err := savePatch(dir, productID, patch); err != nil {
+				errCh <- err
+			}
+		})
+	}
+
+	close(start)
+	wg.Wait()
+	close(errCh)
+
+	var errs []error
+	for err := range errCh {
+		errs = append(errs, err)
+	}
+	return errs
+}
+
+// savePatch saves one concurrent patch.
+func savePatch(dir, productID string, patch model.MarketplaceItemDetails) error {
+	_, err := newTestStore(dir, productID).Save(patch)
+	return err
 }

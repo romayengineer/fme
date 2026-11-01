@@ -13,10 +13,10 @@ const DataDir = paths.DataDir
 type FileStore[T any] = jsonstore.FileStore[T]
 
 // NewProductFileStore returns the store for a product's detail_<id>.json.
-func NewProductFileStore(productId string) FileStore[model.MarketplaceItemDetails] {
+func NewProductFileStore(productID string) FileStore[model.MarketplaceItemDetails] {
 	return jsonstore.NewFileStore[model.MarketplaceItemDetails](
-		productId,
-		paths.DetailFileName(productId),
+		productID,
+		paths.DetailFileName(productID),
 		paths.DetailDir(),
 	)
 }

@@ -19,7 +19,7 @@ func (s *FilePDPState) ClearUnavailable(productID string) error {
 }
 
 func (s *FilePDPState) LoadUnavailableProductIDs() map[string]struct{} {
-	return pdpstate.LoadUnavailableProductIds()
+	return pdpstate.LoadUnavailableProductIDs()
 }
 
 func (s *FilePDPState) RecordPDPFailure(productID string, threshold int) (bool, int) {

@@ -14,11 +14,11 @@ func NewFileResponseSink() *FileResponseSink {
 }
 
 func (s *FileResponseSink) SaveResponse(jsonDatas []any, friendlyName string) (int, error) {
-	return filestore.WriteJsonResponse(jsonDatas, friendlyName)
+	return filestore.WriteJSONResponse(jsonDatas, friendlyName)
 }
 
 func (s *FileResponseSink) SaveResponseByID(jsonDatas []any, friendlyName, id string) (int, error) {
-	return filestore.WriteJsonResponseById(jsonDatas, friendlyName, id)
+	return filestore.WriteJSONResponseByID(jsonDatas, friendlyName, id)
 }
 
 func (s *FileResponseSink) MergeProducts(jsonDatas []any) int {

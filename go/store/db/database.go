@@ -1,3 +1,4 @@
+// Package db implements product storage on top of PocketBase.
 package db
 
 import (
@@ -16,6 +17,7 @@ import (
 	"github.com/romayengineer/fme/go/core/logging"
 )
 
+// PocketBaseDB is the process-wide PocketBase application plus its write lock.
 type PocketBaseDB struct {
 	app *pocketbase.PocketBase
 	mu  sync.Mutex
@@ -26,6 +28,8 @@ var (
 	dbOnce     sync.Once
 )
 
+// GetPocketBaseDB returns the singleton PocketBase database, creating it on
+// first use.
 func GetPocketBaseDB() (*PocketBaseDB, error) {
 	var err error
 	dbOnce.Do(func() {
@@ -55,6 +59,8 @@ func dataDir() string {
 	return filepath.Join(wd, "pb_data")
 }
 
+// Start bootstraps PocketBase, applies its migrations, and ensures the products
+// collection exists. It is safe to call on every run.
 func (db *PocketBaseDB) Start() error {
 	if db.app == nil {
 		return errors.New("pocketbase app not initialized")
@@ -109,10 +115,13 @@ func (db *PocketBaseDB) runMigrations() error {
 	return nil
 }
 
+// GetApp returns the underlying PocketBase application.
 func (db *PocketBaseDB) GetApp() *pocketbase.PocketBase {
 	return db.app
 }
 
+// Close releases database resources. PocketBase closes itself on process exit,
+// so this is currently a no-op kept for a clean shutdown API.
 func (db *PocketBaseDB) Close() error {
 	return nil
 }

@@ -18,6 +18,7 @@ type DescriptionStats struct {
 	Empty           int
 }
 
+// EmptyPercent returns the share of records whose Description is null.
 func (s DescriptionStats) EmptyPercent() float64 {
 	if s.Total == 0 {
 		return 0
@@ -25,6 +26,7 @@ func (s DescriptionStats) EmptyPercent() float64 {
 	return float64(s.Empty) / float64(s.Total) * 100
 }
 
+// WithDescriptionPercent returns the share of records that have a description.
 func (s DescriptionStats) WithDescriptionPercent() float64 {
 	if s.Total == 0 {
 		return 0
@@ -32,6 +34,7 @@ func (s DescriptionStats) WithDescriptionPercent() float64 {
 	return float64(s.WithDescription) / float64(s.Total) * 100
 }
 
+// UnavailablePercent returns the share of records tombstoned as unavailable.
 func (s DescriptionStats) UnavailablePercent() float64 {
 	if s.Total == 0 {
 		return 0
@@ -41,10 +44,10 @@ func (s DescriptionStats) UnavailablePercent() float64 {
 
 // ComputeDescriptionStats walks data/__Details and counts records by whether their
 // Description is null, excluding listings already marked as no-longer-available
-// (see LoadUnavailableProductIds).
+// (see LoadUnavailableProductIDs).
 func ComputeDescriptionStats() (DescriptionStats, error) {
 	stats := DescriptionStats{}
-	unavailable := pdpstate.LoadUnavailableProductIds()
+	unavailable := pdpstate.LoadUnavailableProductIDs()
 
 	_, err := ForEachDetail(func(_ string, jsonData map[string]any) bool {
 		stats.Total++

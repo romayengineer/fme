@@ -18,7 +18,9 @@ const (
 	// DebugDirName holds raw diagnostic payloads inside the PDP directory.
 	DebugDirName = "debug"
 
-	DetailPrefix   = "detail_"
+	// DetailPrefix starts every merged detail record filename.
+	DetailPrefix = "detail_"
+	// ResponsePrefix starts every raw captured response filename.
 	ResponsePrefix = "response"
 )
 
