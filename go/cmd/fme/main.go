@@ -1,3 +1,4 @@
+// Package main implements the fme command-line interface.
 package main
 
 import (

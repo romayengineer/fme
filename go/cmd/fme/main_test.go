@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/romayengineer/fme/go/app"
+)
 
 func TestActionRegistryCoversCLIActions(t *testing.T) {
 	actions := []string{
@@ -42,12 +46,28 @@ func TestBlockImagesFor(t *testing.T) {
 	}
 }
 
+// assertDepsWired checks that every use-case dependency was constructed.
+func assertDepsWired(t *testing.T, application *app.App) {
+	t.Helper()
+
+	if application.Sessions == nil {
+		t.Error("Sessions is nil")
+	}
+	if application.Details == nil {
+		t.Error("Details is nil")
+	}
+	if application.PDPState == nil {
+		t.Error("PDPState is nil")
+	}
+	if application.Sink == nil {
+		t.Error("Sink is nil")
+	}
+}
+
 func TestNewApplicationIsWired(t *testing.T) {
 	application := newApplication("search", Flags{})
 	if application == nil {
 		t.Fatal("newApplication returned nil")
 	}
-	if application.Sessions == nil || application.Details == nil || application.PDPState == nil || application.Sink == nil {
-		t.Fatalf("application dependencies are incomplete: %+v", application.Deps)
-	}
+	assertDepsWired(t, application)
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"time"
 
 	"github.com/romayengineer/fme/go/analytics/pipeline"
 	"github.com/romayengineer/fme/go/core/logging"
@@ -44,7 +45,12 @@ func runHeatmapServe(flags Flags) error {
 
 	logging.LogInfo0("runHeatmapServe", "serving heat map", "dir", dir, "addr", flags.addr, "html", result.HTMLPaths)
 
-	if err := http.ListenAndServe(flags.addr, noCache(http.FileServer(http.Dir(dir)))); err != nil {
+	server := &http.Server{
+		Addr:              flags.addr,
+		Handler:           noCache(http.FileServer(http.Dir(dir))),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	if err := server.ListenAndServe(); err != nil {
 		logging.LogError0("runHeatmapServe", "http server stopped", "error", err)
 		return err
 	}
