@@ -50,12 +50,19 @@ type ProductPage interface {
 	GoToProduct(id string) error
 }
 
+// ThrottlePage reports whether Facebook is serving its error/rate-limit page.
+type ThrottlePage interface {
+	// IsThrottled reports whether the current page is Facebook's throttling page.
+	IsThrottled() bool
+}
+
 // PagesInterface is the full page-object surface. Consumers should accept the
 // narrow interface they need instead.
 type PagesInterface interface {
 	AuthPage
 	SearchPage
 	ProductPage
+	ThrottlePage
 }
 
 // NewPages binds the page object to page and returns the full page surface.
@@ -216,6 +223,41 @@ func (pl *Pages) MarketplaceSearch(searchKeywords string, scrollDown bool, scrol
 // MarketplaceHome opens the Marketplace home page.
 func (pl *Pages) MarketplaceHome() error {
 	return pl.Page.Goto("https://www.facebook.com/marketplace/")
+}
+
+// throttleMarkers are page-text fragments Facebook shows when it throttles a
+// session. They are matched case-insensitively against document.body.innerText.
+var throttleMarkers = []string{
+	"this page isn't available right now",
+	"this content isn't available right now",
+	"esta página no está disponible",
+	"este contenido no está disponible",
+	"rate limit exceeded",
+}
+
+// IsThrottled reports whether the current page is Facebook's throttling page.
+func (pl *Pages) IsThrottled() bool {
+	value, err := pl.Page.Evaluate("document.body.innerText")
+	if err != nil {
+		return false
+	}
+
+	text, ok := value.(string)
+	if !ok {
+		return false
+	}
+	return containsThrottleMarker(text)
+}
+
+// containsThrottleMarker reports whether text carries a known throttle marker.
+func containsThrottleMarker(text string) bool {
+	lower := strings.ToLower(text)
+	for _, marker := range throttleMarkers {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 // GoToProduct navigates directly to a listing URL.

@@ -37,3 +37,25 @@ func TestScrollDownZeroIsNoOp(t *testing.T) {
 		t.Fatalf("ScrollDown(0) = %v, want nil", err)
 	}
 }
+
+func TestContainsThrottleMarker(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+		want bool
+	}{
+		{name: "english", text: "This page isn't available right now", want: true},
+		{name: "spanish", text: "Esta página no está disponible", want: true},
+		{name: "rate limit", text: "Rate limit exceeded", want: true},
+		{name: "healthy feed", text: "Marketplace listings near you", want: false},
+		{name: "empty", text: "", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := containsThrottleMarker(tt.text); got != tt.want {
+				t.Errorf("containsThrottleMarker(%q) = %v, want %v", tt.text, got, tt.want)
+			}
+		})
+	}
+}

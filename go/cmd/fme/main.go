@@ -16,12 +16,13 @@ type actionFunc func(*app.App, Flags) error
 // adding one entry here and, if needed, one options struct in go/app.
 var actionRegistry = map[string]actionFunc{
 	"search": func(a *app.App, flags Flags) error {
-		return a.Search(app.SearchOptions{
+		_, err := a.Search(app.SearchOptions{
 			Keywords:      flags.keywords,
 			ScrollDown:    true,
 			ScrollSeconds: flags.scrollSeconds,
 			Pause:         waitForInput,
 		})
+		return err
 	},
 	"pull_description": func(a *app.App, flags Flags) error {
 		_, err := a.PullDescriptions(app.PullDescriptionsOptions{

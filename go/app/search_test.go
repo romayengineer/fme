@@ -183,12 +183,15 @@ func TestSearchRunsSearchAndProcessesResponses(t *testing.T) {
 		Details:  details,
 	})
 
-	err := app.Search(SearchOptions{
+	result, err := app.Search(SearchOptions{
 		Keywords: "macbook m1",
 		Pause:    func() { paused = true },
 	})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
+	}
+	if result.Throttled {
+		t.Error("Search reported a throttle on a healthy page")
 	}
 
 	assertSearchRun(t, page, details)
@@ -223,6 +226,22 @@ func assertSearchShutdown(t *testing.T, waiter *fakeWaiter, paused bool, ctx *fa
 	}
 }
 
+func TestSearchReportsThrottle(t *testing.T) {
+	page := &fakePage{body: "This page isn't available right now"}
+	app := New(Deps{
+		Sessions: &fakeSessions{session: &Session{Context: &fakeContext{page: page}, Waiter: &fakeWaiter{}}},
+		Details:  &fakeDetails{},
+	})
+
+	result, err := app.Search(SearchOptions{Keywords: "x"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if !result.Throttled {
+		t.Error("Search did not report the throttle page")
+	}
+}
+
 func TestSearchReturnsProcessError(t *testing.T) {
 	details := &fakeDetails{err: errors.New("disk full")}
 	app := New(Deps{
@@ -230,7 +249,7 @@ func TestSearchReturnsProcessError(t *testing.T) {
 		Details:  details,
 	})
 
-	if err := app.Search(SearchOptions{Keywords: "x"}); err == nil {
+	if _, err := app.Search(SearchOptions{Keywords: "x"}); err == nil {
 		t.Fatal("Search returned no error")
 	}
 }
@@ -240,7 +259,7 @@ func TestSearchReturnsSessionError(t *testing.T) {
 		Sessions: &fakeSessions{err: errors.New("login failed")},
 	})
 
-	if err := app.Search(SearchOptions{Keywords: "x"}); err == nil {
+	if _, err := app.Search(SearchOptions{Keywords: "x"}); err == nil {
 		t.Fatal("Search returned no error")
 	}
 }
@@ -248,7 +267,7 @@ func TestSearchReturnsSessionError(t *testing.T) {
 func TestSearchRequiresSessionFactory(t *testing.T) {
 	app := New(Deps{})
 
-	if err := app.Search(SearchOptions{Keywords: "x"}); err == nil {
+	if _, err := app.Search(SearchOptions{Keywords: "x"}); err == nil {
 		t.Fatal("Search returned no error without a session factory")
 	}
 }

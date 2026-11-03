@@ -67,30 +67,49 @@ type SearchOptions struct {
 	Pause         func()
 }
 
+// SearchResult summarizes one Marketplace search run.
+type SearchResult struct {
+	// Throttled reports that Facebook served its error page for the search.
+	Throttled bool
+}
+
 // Search opens a session, searches Marketplace, and materializes the captured
 // responses into data/__Details. It returns the first operational error while
 // still processing whatever responses were captured.
-func (a *App) Search(opts SearchOptions) error {
+func (a *App) Search(opts SearchOptions) (SearchResult, error) {
 	if a.Sessions == nil {
-		return errors.New("search: session factory is not configured")
+		return SearchResult{}, errors.New("search: session factory is not configured")
 	}
 
 	session, err := a.openAuthenticatedSession("search")
 	if err != nil {
-		return err
+		return SearchResult{}, err
 	}
 	defer a.closeAuthenticatedSession("search", session)
 
 	_, pageHelpers, err := newPageHelpers(session.Context, "search")
 	if err != nil {
-		return err
+		return SearchResult{}, err
 	}
 
+	result := SearchResult{}
 	runErr := a.runSearch(pageHelpers, opts)
+	if runErr == nil {
+		result.Throttled = pageHelpers.IsThrottled()
+		a.logSearchThrottle(result)
+	}
+
 	runErr = a.finishCapture(session, "search", runErr)
 	a.pause(opts.Pause)
 
-	return runErr
+	return result, runErr
+}
+
+// logSearchThrottle reports a throttled search so unattended runs are visible.
+func (a *App) logSearchThrottle(result SearchResult) {
+	if result.Throttled {
+		a.Logger.Warn("search: Facebook is serving its throttle page (likely error 1675004)")
+	}
 }
 
 // runSearch drives the Marketplace search, logging rather than returning the
