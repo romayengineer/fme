@@ -98,7 +98,18 @@ func run() error {
 	}
 
 	application := newApplication(action, flags)
+	defer closeSessions(application)
 	return runner(application, flags)
+}
+
+// closeSessions stops the shared Playwright runtime on exit.
+func closeSessions(application *app.App) {
+	if application.Sessions == nil {
+		return
+	}
+	if err := application.Sessions.Close(); err != nil {
+		logging.LogError0("main", "close session factory", "error", err)
+	}
 }
 
 func newApplication(action string, flags Flags) *app.App {

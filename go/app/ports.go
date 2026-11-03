@@ -16,6 +16,8 @@ import (
 type SessionFactory interface {
 	// Open returns an authenticated browser session.
 	Open() (*Session, error)
+	// Close stops the shared Playwright runtime, if one was started.
+	Close() error
 }
 
 // DetailStore is the application view of the data/__Details store.

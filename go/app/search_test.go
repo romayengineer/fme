@@ -77,14 +77,20 @@ type fakeWaiter struct {
 func (w *fakeWaiter) Wait() { w.waits++ }
 
 type fakeSessions struct {
-	session   *Session
-	err       error
-	openCalls int
+	session    *Session
+	err        error
+	openCalls  int
+	closeCalls int
 }
 
 func (f *fakeSessions) Open() (*Session, error) {
 	f.openCalls++
 	return f.session, f.err
+}
+
+func (f *fakeSessions) Close() error {
+	f.closeCalls++
+	return nil
 }
 
 type fakeDetails struct {

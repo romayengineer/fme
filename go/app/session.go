@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/romayengineer/fme/go/browser/driver"
 	"github.com/romayengineer/fme/go/browser/facebook"
@@ -30,6 +31,14 @@ type BrowserSessionFactory struct {
 	Sink        capture.Sink
 	// Headless overrides the browser mode when non-nil (from -headless).
 	Headless *bool
+
+	// mu guards playwright so concurrent opens share one runtime.
+	mu sync.Mutex
+	// playwright is the lazily started runtime, reused across sessions. A
+	// long-running scheduler must not start (and leak) one driver per cycle.
+	playwright driver.PlaywrightWrapperInterface
+	// newPlaywright starts a runtime; tests replace it with a fake.
+	newPlaywright func() (driver.PlaywrightWrapperInterface, error)
 }
 
 // NewSessionFactory returns a factory that configures the browser for the
@@ -38,7 +47,12 @@ type BrowserSessionFactory struct {
 // in Open, so actions such as install_drivers work before credentials are
 // configured.
 func NewSessionFactory(blockImages bool, sink capture.Sink, headless *bool) *BrowserSessionFactory {
-	return &BrowserSessionFactory{BlockImages: blockImages, Sink: sink, Headless: headless}
+	return &BrowserSessionFactory{
+		BlockImages:   blockImages,
+		Sink:          sink,
+		Headless:      headless,
+		newPlaywright: driver.NewPlaywrightWrapper,
+	}
 }
 
 // Open implements SessionFactory.
@@ -51,7 +65,7 @@ func (f *BrowserSessionFactory) Open() (*Session, error) {
 	headless := ResolveHeadless(f.Headless, config.Headless)
 	logging.LogInfo0("session", "browser mode", "headless", headless)
 
-	playwrightWrapper, err := driver.NewPlaywrightWrapper()
+	playwrightWrapper, err := f.runtime()
 	if err != nil {
 		return nil, fmt.Errorf("start playwright: %w", err)
 	}
@@ -64,6 +78,38 @@ func (f *BrowserSessionFactory) Open() (*Session, error) {
 	handlers := capture.SetContextEventHandlers(ctx, f.BlockImages, f.Sink)
 
 	return &Session{Context: ctx, Waiter: handlers}, nil
+}
+
+// runtime returns the shared Playwright runtime, starting it on first use.
+func (f *BrowserSessionFactory) runtime() (driver.PlaywrightWrapperInterface, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.playwright != nil {
+		return f.playwright, nil
+	}
+
+	wrapper, err := f.newPlaywright()
+	if err != nil {
+		return nil, err
+	}
+	f.playwright = wrapper
+	return wrapper, nil
+}
+
+// Close stops the shared Playwright runtime. It is safe to call repeatedly and
+// is a no-op before the first Open.
+func (f *BrowserSessionFactory) Close() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.playwright == nil {
+		return nil
+	}
+
+	err := f.playwright.Stop()
+	f.playwright = nil
+	return err
 }
 
 // openContext restores the configured profile or logs in with credentials.
