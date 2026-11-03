@@ -21,10 +21,27 @@ type PullDescriptionsOptions struct {
 	MaxRateLimitWaitSeconds int
 }
 
+// PullResult summarizes one description pass.
+type PullResult struct {
+	// Pending is how many listings were missing a description at the start.
+	Pending int
+	// Pulled is how many descriptions were fetched in this pass.
+	Pulled int
+	// Skipped counts listings that already had a PDP response.
+	Skipped int
+	// Unavailable counts tombstoned listings.
+	Unavailable int
+	// WaitedSeconds is the total time spent waiting on rate limits.
+	WaitedSeconds int
+	// RateLimited reports that the pass stopped because Facebook throttled it.
+	RateLimited bool
+}
+
 // pullPlan is the pre-browser snapshot of which listings still need work.
 type pullPlan struct {
 	existing    map[string]struct{}
 	unavailable map[string]struct{}
+	pending     int
 }
 
 // pullState accumulates the counters and lookups for one description pass.
@@ -43,24 +60,24 @@ type pullState struct {
 // PullDescriptions fetches redacted_description for every detail record whose
 // Description is null. It opens one listing to capture the PDP request
 // template, then replays that request for the remaining listings.
-func (a *App) PullDescriptions(opts PullDescriptionsOptions) error {
+func (a *App) PullDescriptions(opts PullDescriptionsOptions) (PullResult, error) {
 	if err := a.validatePullConfig(); err != nil {
-		return err
+		return PullResult{}, err
 	}
 
 	runErr := a.processResponses("pull-description", nil)
 
 	plan, done, err := a.planPull(opts)
 	if err != nil {
-		return err
+		return PullResult{}, err
 	}
 	if done {
-		return runErr
+		return PullResult{}, runErr
 	}
 
 	session, page, pageHelpers, err := a.startPullSession()
 	if err != nil {
-		return err
+		return PullResult{}, err
 	}
 	defer a.closeAuthenticatedSession("pull-description", session)
 
@@ -73,7 +90,7 @@ func (a *App) PullDescriptions(opts PullDescriptionsOptions) error {
 	runErr = a.pullAll(state, page, pageHelpers, runErr)
 	a.logPullSummary(state)
 
-	return a.finishCapture(session, "pull-description", runErr)
+	return state.result(plan.pending), a.finishCapture(session, "pull-description", runErr)
 }
 
 // validatePullConfig checks the dependencies the description pass needs.
@@ -107,7 +124,7 @@ func (a *App) planPull(opts PullDescriptionsOptions) (*pullPlan, bool, error) {
 	}
 
 	a.Logger.Info("pull-description: pending descriptions", "pending", pending)
-	return &pullPlan{existing: existing, unavailable: unavailable}, false, nil
+	return &pullPlan{existing: existing, unavailable: unavailable, pending: pending}, false, nil
 }
 
 // loadUnavailable returns the tombstoned ids, unless a retry was requested.
@@ -285,6 +302,18 @@ func (s *pullState) clearFailureState(productID string) {
 		if err := s.app.PDPState.ClearUnavailable(productID); err != nil {
 			s.app.Logger.Error("pull-description: clear unavailable marker", "productID", productID, "error", err)
 		}
+	}
+}
+
+// result snapshots the pass counters for the caller.
+func (s *pullState) result(pending int) PullResult {
+	return PullResult{
+		Pending:       pending,
+		Pulled:        s.pulled,
+		Skipped:       s.skipped,
+		Unavailable:   s.unavailableCount,
+		WaitedSeconds: s.waitedSeconds,
+		RateLimited:   s.rateLimited,
 	}
 }
 

@@ -29,7 +29,7 @@ func TestPullDescriptionsNothingToPullSkipsSession(t *testing.T) {
 		Sink:     &fakeResponseSink{},
 	})
 
-	if err := app.PullDescriptions(PullDescriptionsOptions{}); err != nil {
+	if _, err := app.PullDescriptions(PullDescriptionsOptions{}); err != nil {
 		t.Fatalf("PullDescriptions: %v", err)
 	}
 	if sessions.openCalls != 0 {
@@ -56,8 +56,12 @@ func TestPullDescriptionsStopsOnRateLimit(t *testing.T) {
 		Sink:     &fakeResponseSink{},
 	})
 
-	if err := app.PullDescriptions(PullDescriptionsOptions{RateLimitWaitSeconds: 0}); err != nil {
+	result, err := app.PullDescriptions(PullDescriptionsOptions{RateLimitWaitSeconds: 0})
+	if err != nil {
 		t.Fatalf("PullDescriptions: %v", err)
+	}
+	if !result.RateLimited {
+		t.Errorf("result = %+v, want RateLimited", result)
 	}
 	if len(state.marked) != 0 {
 		t.Errorf("rate-limited listing was marked unavailable: %v", state.marked)

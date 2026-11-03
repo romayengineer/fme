@@ -24,12 +24,13 @@ var actionRegistry = map[string]actionFunc{
 		})
 	},
 	"pull_description": func(a *app.App, flags Flags) error {
-		return a.PullDescriptions(app.PullDescriptionsOptions{
+		_, err := a.PullDescriptions(app.PullDescriptionsOptions{
 			RetryUnavailable:        flags.retryUnavailable,
 			DelayMs:                 flags.delayMs,
 			RateLimitWaitSeconds:    flags.rateLimitWaitSeconds,
 			MaxRateLimitWaitSeconds: flags.maxRateLimitWaitSeconds,
 		})
+		return err
 	},
 	"get_details": func(a *app.App, _ Flags) error {
 		return a.GetDetails(app.GetDetailsOptions{Pause: waitForInput})
