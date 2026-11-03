@@ -21,14 +21,17 @@ const (
 // ScheduleState is the durable bookkeeping the scheduler needs to resume after
 // a restart instead of hammering a blocked account.
 type ScheduleState struct {
-	LastCycleAt    time.Time `json:"lastCycleAt,omitzero"`
-	NextRunAt      time.Time `json:"nextRunAt,omitzero"`
-	BlockedUntil   time.Time `json:"blockedUntil,omitzero"`
-	LastSuccessAt  time.Time `json:"lastSuccessAt,omitzero"`
-	BackoffSeconds int       `json:"backoffSeconds,omitzero"`
-	LastTerm       string    `json:"lastTerm,omitempty"`
-	LastError      string    `json:"lastError,omitempty"`
-	Cycles         int       `json:"cycles,omitzero"`
+	LastCycleAt     time.Time `json:"lastCycleAt,omitzero"`
+	NextRunAt       time.Time `json:"nextRunAt,omitzero"`
+	BlockedUntil    time.Time `json:"blockedUntil,omitzero"`
+	LastSuccessAt   time.Time `json:"lastSuccessAt,omitzero"`
+	LastThrottledAt time.Time `json:"lastThrottledAt,omitzero"`
+	BackoffSeconds  int       `json:"backoffSeconds,omitzero"`
+	LastTerm        string    `json:"lastTerm,omitempty"`
+	LastError       string    `json:"lastError,omitempty"`
+	Cycles          int       `json:"cycles,omitzero"`
+	LastPulled      int       `json:"lastPulled,omitzero"`
+	LastPending     int       `json:"lastPending,omitzero"`
 }
 
 // RateLimitBackoff returns the recorded backoff, or zero when there is none.
