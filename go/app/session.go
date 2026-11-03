@@ -72,6 +72,9 @@ func (f *BrowserSessionFactory) Open() (*Session, error) {
 
 	ctx, err := openContext(playwrightWrapper, config, headless)
 	if err != nil {
+		// Drop the runtime so the next scheduler cycle starts a fresh driver
+		// instead of reusing one that may be wedged.
+		_ = f.Close()
 		return nil, err
 	}
 

@@ -138,7 +138,7 @@ journalctl --user -u fme-schedule --since "1 hour ago"
 | `-schedule-delay-ms` | `2000` | Delay between description requests |
 | `-archive-after` | `168h` | Age before processed responses are archived |
 | `-keep-archived` | `720h` | Age before archived responses are deleted |
-| `-once` | `false` | Run one cycle and exit (honours a current block) |
+| `-once` | `false` | Run one cycle now and exit (a current block is still honoured) |
 | `-log-file` | empty | Also append logs to this file |
 | `-headless` | auto | Force headless; by default a display is used when available |
 

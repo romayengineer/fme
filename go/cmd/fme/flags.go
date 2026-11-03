@@ -103,7 +103,7 @@ func registerFlags() *rawFlags {
 		termsFile:               flag.String("terms", "search-terms.txt", "Search terms file, one query per line (action=schedule)"),
 		interval:                flag.Duration("interval", app.DefaultScheduleInterval, "Pause between scheduler cycles (action=schedule)"),
 		perTermDelay:            flag.Duration("per-term-delay", app.DefaultPerTermDelay, "Pause between consecutive searches (action=schedule; 0 disables)"),
-		once:                    flag.Bool("once", false, "Run one scheduler cycle and exit (action=schedule)"),
+		once:                    flag.Bool("once", false, "Run one scheduler cycle now and exit (a current rate-limit block is still honoured)"),
 		archiveAfter:            flag.Duration("archive-after", app.DefaultArchiveAfter, "Age after which processed search responses are archived (action=schedule, archive_responses)"),
 		keepArchived:            flag.Duration("keep-archived", app.DefaultKeepArchived, "Age after which archived responses are deleted (action=schedule, archive_responses)"),
 		scheduleDelayMs:         flag.Int("schedule-delay-ms", app.DefaultScheduleDelayMs, "Delay in milliseconds between description requests in a scheduler cycle (action=schedule)"),

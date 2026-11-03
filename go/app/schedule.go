@@ -26,12 +26,15 @@ const (
 // clock fall back to defaults; pacing values are used as-is (zero disables that
 // pacing), because the CLI supplies them from flags.
 type ScheduleOptions struct {
-	Terms          []string
-	Interval       time.Duration
-	PerTermDelay   time.Duration
-	ScrollSeconds  int
-	DelayMs        int
-	MaxCycles      int
+	Terms         []string
+	Interval      time.Duration
+	PerTermDelay  time.Duration
+	ScrollSeconds int
+	DelayMs       int
+	MaxCycles     int
+	// RunNow ignores a future NextRunAt for the first cycle (used by -once).
+	// A rate-limit block is still honoured.
+	RunNow         bool
 	ArchiveOptions ArchiveOptions
 	StatePath      string
 	LockPath       string
@@ -135,9 +138,10 @@ func SleepWithContext(ctx context.Context, d time.Duration) error {
 
 // scheduler holds the loop state for one RunSchedule call.
 type scheduler struct {
-	app   *App
-	opts  ScheduleOptions
-	state ScheduleState
+	app         *App
+	opts        ScheduleOptions
+	state       ScheduleState
+	cycleErrors int
 }
 
 // run executes cycles until the configured limit or a cancelled context.
@@ -146,6 +150,7 @@ func (s *scheduler) run(ctx context.Context) error {
 		if err := s.runOne(ctx); err != nil {
 			return s.finish(err)
 		}
+		s.opts.RunNow = false
 		if err := s.saveState(); err != nil {
 			return err
 		}
@@ -198,6 +203,10 @@ func (s *scheduler) waitForNext(ctx context.Context) error {
 
 // nextTarget returns the later of the next run and the rate-limit unblock time.
 func (s *scheduler) nextTarget() time.Time {
+	if s.opts.RunNow {
+		return s.state.BlockedUntil
+	}
+
 	target := s.state.NextRunAt
 	if s.state.BlockedUntil.After(target) {
 		return s.state.BlockedUntil
@@ -207,6 +216,7 @@ func (s *scheduler) nextTarget() time.Time {
 
 // cycle searches every term, pulls pending descriptions, and runs maintenance.
 func (s *scheduler) cycle(ctx context.Context) error {
+	s.cycleErrors = 0
 	s.refreshProfile()
 
 	throttled, err := s.searchTerms(ctx)
@@ -246,6 +256,7 @@ func (s *scheduler) searchTerm(ctx context.Context, index int, term string) (boo
 	s.state.LastTerm = term
 	result, err := s.search(term)
 	if err != nil {
+		s.cycleErrors++
 		s.recordError(fmt.Errorf("search %q: %w", term, err))
 		return false, nil
 	}
@@ -276,8 +287,9 @@ func (s *scheduler) pullAndMaintain() error {
 	s.state.LastPulled = result.Pulled
 
 	if err != nil {
+		s.cycleErrors++
 		s.recordError(err)
-		s.state.NextRunAt = s.now().Add(MinRateLimitBackoff)
+		s.retrySoon()
 		return nil
 	}
 	if result.RateLimited {
@@ -285,21 +297,29 @@ func (s *scheduler) pullAndMaintain() error {
 		return nil
 	}
 
-	s.maintain()
+	if err := s.maintain(); err != nil {
+		s.cycleErrors++
+		s.recordError(err)
+	}
+	if s.cycleErrors > 0 {
+		s.retrySoon()
+		return nil
+	}
+
 	s.markSuccess()
 	return nil
 }
 
 // maintain runs the post-cycle storage jobs.
-func (s *scheduler) maintain() {
+func (s *scheduler) maintain() error {
 	s.app.DedupePDP()
 
 	archived, pruned, err := s.app.ArchiveResponses(s.opts.ArchiveOptions)
 	if err != nil {
-		s.recordError(err)
-		return
+		return err
 	}
 	s.app.Logger.Info("schedule: maintenance finished", "archived", archived, "pruned", pruned)
+	return nil
 }
 
 // refreshProfile refreshes the copied Chrome profile when a hook is configured.
@@ -332,6 +352,12 @@ func (s *scheduler) markSuccess() {
 	s.state.LastSuccessAt = s.now()
 	s.state.NextRunAt = s.now().Add(s.opts.Interval)
 	s.state.LastError = ""
+}
+
+// retrySoon schedules a shorter retry after a runtime error.
+func (s *scheduler) retrySoon() {
+	s.state.NextRunAt = s.now().Add(MinRateLimitBackoff)
+	s.app.Logger.Warn("schedule: retrying after runtime errors", "seconds", int(MinRateLimitBackoff.Seconds()))
 }
 
 // recordError logs and stores a runtime error without stopping the loop.

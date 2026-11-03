@@ -33,6 +33,7 @@ func runSchedule(a *app.App, flags Flags) error {
 	}
 	if flags.once {
 		opts.MaxCycles = 1
+		opts.RunNow = true
 	}
 	return a.RunSchedule(ctx, opts)
 }

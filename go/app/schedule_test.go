@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -101,6 +102,51 @@ func TestRunScheduleHonorsExistingBlock(t *testing.T) {
 	if state.BackoffSeconds != 0 || !state.BlockedUntil.IsZero() {
 		t.Errorf("block was not reset after success: %+v", state)
 	}
+}
+
+func TestRunScheduleRetriesSoonAfterSessionError(t *testing.T) {
+	now := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
+	app := New(Deps{
+		Sessions: &fakeSessions{err: errors.New("login failed")},
+		Details:  &fakeDetails{},
+		PDPState: &fakePDPState{},
+		Sink:     &fakeResponseSink{},
+	})
+	opts := testScheduleOptions(t, []string{"macbook m1"}, now)
+
+	if err := app.RunSchedule(context.Background(), opts); err != nil {
+		t.Fatalf("RunSchedule: %v", err)
+	}
+
+	state := loadState(t, opts.StatePath)
+	if state.LastError == "" {
+		t.Error("LastError was not recorded")
+	}
+	if !state.LastSuccessAt.IsZero() {
+		t.Errorf("LastSuccessAt = %v, want zero", state.LastSuccessAt)
+	}
+	if !state.NextRunAt.Equal(now.Add(MinRateLimitBackoff)) {
+		t.Errorf("NextRunAt = %v, want %v", state.NextRunAt, now.Add(MinRateLimitBackoff))
+	}
+}
+
+func TestRunScheduleRunNowIgnoresFutureNextRun(t *testing.T) {
+	now := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
+	app, _, _ := testScheduleApp(t)
+	sleeps := &sleepRecorder{}
+	opts := testScheduleOptions(t, []string{"macbook m1"}, now)
+	opts.Sleep = sleeps.sleep
+	opts.RunNow = true
+	if err := SaveScheduleState(opts.StatePath, ScheduleState{NextRunAt: now.Add(2 * time.Hour)}); err != nil {
+		t.Fatalf("SaveScheduleState: %v", err)
+	}
+
+	if err := app.RunSchedule(context.Background(), opts); err != nil {
+		t.Fatalf("RunSchedule: %v", err)
+	}
+
+	assertSleeps(t, sleeps, nil)
+	assertInt(t, "Cycles", loadState(t, opts.StatePath).Cycles, 1)
 }
 
 func TestRunScheduleStopsCleanlyOnCancellation(t *testing.T) {
