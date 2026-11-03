@@ -22,6 +22,11 @@ const (
 	DetailPrefix = "detail_"
 	// ResponsePrefix starts every raw captured response filename.
 	ResponsePrefix = "response"
+
+	// SchedulerStateFile holds the durable scheduler bookkeeping.
+	SchedulerStateFile = "scheduler-state.json"
+	// SchedulerLockFile guards against two concurrent scheduler instances.
+	SchedulerLockFile = ".scheduler.lock"
 )
 
 // DetailDir is the directory of merged product detail records.
@@ -37,6 +42,16 @@ func PDPDir() string {
 // PDPDebugDir is the directory of raw diagnostic PDP payloads.
 func PDPDebugDir() string {
 	return filepath.Join(PDPDir(), DebugDirName)
+}
+
+// SchedulerStatePath is the durable scheduler state file.
+func SchedulerStatePath() string {
+	return filepath.Join(DataDir, SchedulerStateFile)
+}
+
+// SchedulerLockPath is the scheduler's single-instance lock file.
+func SchedulerLockPath() string {
+	return filepath.Join(DataDir, SchedulerLockFile)
 }
 
 // DetailFileName returns the deterministic filename for a product detail.
