@@ -1,0 +1,22 @@
+# Marketplace search terms for the unattended scheduler (`just daemon`).
+#
+# One query per line. Blank lines and lines starting with # are ignored.
+# Duplicate terms are dropped. Edit this file and the next cycle picks it up;
+# restart the service after editing so the terms are re-read:
+#
+#   systemctl --user restart fme-schedule.service
+#
+# Keep the list short and specific: every term costs one Marketplace search
+# (up to -scroll-seconds of scrolling) plus the description pulls it creates.
+
+macbook m1
+macbook m2
+macbook m3
+macbook m4
+
+gaming pc
+pc nvidia
+
+iphone 16
+
+mac mini

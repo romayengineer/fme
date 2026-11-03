@@ -129,6 +129,28 @@ heatmap-serve *args:
 serve:
     go run ./{{cmd}} -action=serve
 
+# Run the unattended scheduler in the foreground (Ctrl-C to stop; flags pass through)
+daemon *args: _sync-profile
+    go run ./{{cmd}} -action=schedule {{args}}
+
+# Print the persisted scheduler state (last cycle, next run, backoff, error)
+status:
+    go run ./{{cmd}} -action=status
+
+# Archive and prune processed search responses now
+archive *args:
+    go run ./{{cmd}} -action=archive_responses {{args}}
+
+# Install/start the scheduler as a systemd user service (see scripts/install-service.sh)
+service-install *args:
+    @./scripts/install-service.sh {{args}}
+
+service-status:
+    systemctl --user status fme-schedule.service --no-pager
+
+service-logs:
+    journalctl --user -u fme-schedule.service -f
+
 # Archive the scraped data directory
 backup:
     #!/usr/bin/env bash

@@ -95,6 +95,11 @@ you to log in first. Without a profile it also accepts `FME_USERNAME`/`FME_PASSW
 | `just process-data` | Re-extract listings from captured responses (no browser) |
 | `just description-stats` | Report how many `data/__Details` listings have no description |
 | `just dedupe-pdp` | Remove duplicate PDP responses (keeps newest per id) |
+| `just daemon` | Run the unattended scheduler in the foreground |
+| `just status` | Show the scheduler's last cycle, next run, and backoff |
+| `just archive` | Archive/prune processed search responses |
+| `just service-install` | Install/start the scheduler as a systemd user service |
+| `just service-status` / `just service-logs` | Inspect the running service |
 | `just serve` | PocketBase admin/web UI on http://127.0.0.1:8090/_/ |
 | `just save` | Import `data/__Details` into PocketBase (creates the DB if needed) |
 | `just sync` | Push `data/` to a remote host (merge; see below) |
@@ -102,6 +107,26 @@ you to log in first. Without a profile it also accepts `FME_USERNAME`/`FME_PASSW
 | `just ml-install` / `just ml-train` | Python price-model pipeline |
 
 `just search` pauses on `waiting for input:` — press Enter to finish.
+
+## Running unattended
+
+`just daemon` runs the scraper on a schedule: it searches every term in
+`search-terms.txt`, pulls descriptions for new listings, dedupes/archives
+responses, and retries automatically when Facebook throttles the account. The
+recommended deployment is a systemd user service:
+
+```bash
+$EDITOR search-terms.txt   # your Marketplace queries, one per line
+just build
+just service-install       # install + start fme-schedule.service
+just status                # last cycle, next run, backoff, last error
+just service-logs          # follow the logs
+```
+
+A cycle starts every 6 hours by default. Progress and the rate-limit backoff are
+persisted in `data/scheduler-state.json`, so restarts resume instead of
+repeating work. See [docs/scheduling.md](docs/scheduling.md) for terms, flags,
+retention, and troubleshooting.
 
 ## Syncing data to a server
 
