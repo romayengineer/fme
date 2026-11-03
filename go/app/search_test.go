@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mxschmitt/playwright-go"
 
@@ -101,6 +102,10 @@ type fakeDetails struct {
 	pdpIDs      map[string]struct{}
 	fillErr     error
 	dedupeCalls int
+	archiveCall int
+	archived    int
+	pruned      int
+	archiveErr  error
 	stats       DescriptionStats
 }
 
@@ -130,6 +135,11 @@ func (d *fakeDetails) PendingDescriptions(map[string]struct{}, map[string]struct
 }
 func (d *fakeDetails) FillEmpty() error { return d.fillErr }
 func (d *fakeDetails) DedupePDP()       { d.dedupeCalls++ }
+func (d *fakeDetails) ArchiveSearchResponses(time.Time, time.Time) (int, int, error) {
+	d.archiveCall++
+	return d.archived, d.pruned, d.archiveErr
+}
+
 func (d *fakeDetails) DescriptionStats() (DescriptionStats, error) {
 	return d.stats, nil
 }

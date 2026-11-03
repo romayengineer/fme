@@ -43,6 +43,25 @@ func TestMaintenanceDelegatesToDetailStore(t *testing.T) {
 	assertInt(t, "WithDescription", stats.WithDescription, 2)
 }
 
+func TestArchiveResponsesDelegatesToDetailStore(t *testing.T) {
+	details := &fakeDetails{archived: 3, pruned: 1}
+	app := New(Deps{Details: details})
+
+	archived, pruned, err := app.ArchiveResponses(ArchiveOptions{})
+	requireNoError(t, err)
+	assertInt(t, "ArchiveSearchResponses calls", details.archiveCall, 1)
+	assertInt(t, "archived", archived, 3)
+	assertInt(t, "pruned", pruned, 1)
+}
+
+func TestArchiveResponsesRequiresDetailStore(t *testing.T) {
+	app := New(Deps{})
+
+	if _, _, err := app.ArchiveResponses(ArchiveOptions{}); err == nil {
+		t.Fatal("ArchiveResponses returned no error without a detail store")
+	}
+}
+
 func TestMaintenanceReturnsDetailErrors(t *testing.T) {
 	app := New(Deps{Details: &fakeDetails{err: errors.New("read failed")}})
 

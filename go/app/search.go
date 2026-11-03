@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"time"
 
 	"github.com/romayengineer/fme/go/browser/marketplace"
 	"github.com/romayengineer/fme/go/store/filestore"
@@ -43,6 +44,11 @@ func (s *FileDetailStore) FillEmpty() error {
 // DedupePDP removes duplicate PDP response files.
 func (s *FileDetailStore) DedupePDP() {
 	filestore.DedupePDP()
+}
+
+// ArchiveSearchResponses moves processed search responses into data/archived/.
+func (s *FileDetailStore) ArchiveSearchResponses(cutoff, pruneBefore time.Time) (int, int, error) {
+	return filestore.ArchiveSearchResponses(cutoff, pruneBefore)
 }
 
 // DescriptionStats returns description coverage for the store.

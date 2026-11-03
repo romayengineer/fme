@@ -1,6 +1,26 @@
 package app
 
-import "errors"
+import (
+	"errors"
+	"time"
+)
+
+// Raw-response retention defaults for the scheduler.
+const (
+	// DefaultArchiveAfter is how long processed search responses stay in the
+	// data root before they are moved to data/archived/.
+	DefaultArchiveAfter = 7 * 24 * time.Hour
+	// DefaultKeepArchived is how long archived responses are kept before deletion.
+	DefaultKeepArchived = 30 * 24 * time.Hour
+)
+
+// ArchiveOptions configures raw-response retention.
+type ArchiveOptions struct {
+	// OlderThan overrides DefaultArchiveAfter.
+	OlderThan time.Duration
+	// KeepArchive overrides DefaultKeepArchived.
+	KeepArchive time.Duration
+}
 
 // DescriptionStats summarizes how many detail records have a description.
 type DescriptionStats struct {
@@ -42,6 +62,25 @@ func (a *App) DedupePDP() {
 	if a.Details != nil {
 		a.Details.DedupePDP()
 	}
+}
+
+// ArchiveResponses moves processed search responses into data/archived/ and
+// prunes old archives. It never touches PDP responses or detail records.
+func (a *App) ArchiveResponses(opts ArchiveOptions) (archived, pruned int, err error) {
+	if a.Details == nil {
+		return 0, 0, errors.New("archive-responses: detail store is not configured")
+	}
+
+	now := time.Now()
+	return a.Details.ArchiveSearchResponses(now.Add(-durationOr(opts.OlderThan, DefaultArchiveAfter)), now.Add(-durationOr(opts.KeepArchive, DefaultKeepArchived)))
+}
+
+// durationOr returns value when positive, otherwise fallback.
+func durationOr(value, fallback time.Duration) time.Duration {
+	if value > 0 {
+		return value
+	}
+	return fallback
 }
 
 // FillEmpty backfills missing URLs on existing detail files.

@@ -7,6 +7,7 @@ package app
 
 import (
 	"log/slog"
+	"time"
 
 	"github.com/romayengineer/fme/go/marketplace/model"
 )
@@ -34,6 +35,9 @@ type DetailStore interface {
 	FillEmpty() error
 	// DedupePDP removes duplicate PDP response files.
 	DedupePDP()
+	// ArchiveSearchResponses moves processed search responses older than
+	// cutoff into data/archived/ and prunes archives older than pruneBefore.
+	ArchiveSearchResponses(cutoff, pruneBefore time.Time) (archived, pruned int, err error)
 	// DescriptionStats returns description coverage for the store.
 	DescriptionStats() (DescriptionStats, error)
 }

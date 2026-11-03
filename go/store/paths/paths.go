@@ -17,6 +17,8 @@ const (
 	PDPDirName = "MarketplacePDPContainerQuery"
 	// DebugDirName holds raw diagnostic payloads inside the PDP directory.
 	DebugDirName = "debug"
+	// ArchivedDirName holds processed raw responses moved out of the data root.
+	ArchivedDirName = "archived"
 
 	// DetailPrefix starts every merged detail record filename.
 	DetailPrefix = "detail_"
@@ -42,6 +44,12 @@ func PDPDir() string {
 // PDPDebugDir is the directory of raw diagnostic PDP payloads.
 func PDPDebugDir() string {
 	return filepath.Join(PDPDir(), DebugDirName)
+}
+
+// ArchivedDir is the directory of processed raw responses that were moved out
+// of the data root. Walkers ignore it because its path contains "archived".
+func ArchivedDir() string {
+	return filepath.Join(DataDir, ArchivedDirName)
 }
 
 // SchedulerStatePath is the durable scheduler state file.
