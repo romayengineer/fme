@@ -64,6 +64,9 @@ var actionRegistry = map[string]actionFunc{
 		_, err := a.ImportDB()
 		return err
 	},
+	"schedule":          runSchedule,
+	"status":            runStatus,
+	"archive_responses": runArchiveResponses,
 	"heatmap": func(_ *app.App, flags Flags) error {
 		return runHeatmap(flags)
 	},
@@ -125,7 +128,7 @@ func newApplication(action string, flags Flags) *app.App {
 
 func blockImagesFor(action string) bool {
 	switch strings.ToLower(action) {
-	case "search", "pull_description":
+	case "search", "pull_description", "schedule":
 		return true
 	default:
 		return false

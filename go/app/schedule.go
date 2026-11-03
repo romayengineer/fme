@@ -40,6 +40,11 @@ type ScheduleOptions struct {
 	Sleep          func(ctx context.Context, d time.Duration) error
 }
 
+// ScheduleStatus loads the persisted scheduler state from the default path.
+func ScheduleStatus() (ScheduleState, error) {
+	return LoadScheduleState(paths.SchedulerStatePath())
+}
+
 // RunSchedule runs cycles until ctx is cancelled or MaxCycles is reached. A
 // runtime error (browser, login, storage) is logged and retried on the next
 // cycle instead of stopping the daemon; only invalid configuration or an
@@ -272,6 +277,7 @@ func (s *scheduler) pullAndMaintain() error {
 
 	if err != nil {
 		s.recordError(err)
+		s.state.NextRunAt = s.now().Add(MinRateLimitBackoff)
 		return nil
 	}
 	if result.RateLimited {
