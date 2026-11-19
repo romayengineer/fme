@@ -36,8 +36,8 @@ var actionRegistry = map[string]actionFunc{
 	"get_details": func(a *app.App, _ Flags) error {
 		return a.GetDetails(app.GetDetailsOptions{Pause: waitForInput})
 	},
-	"install_drivers": func(a *app.App, _ Flags) error {
-		return a.InstallDrivers()
+	"install_drivers": func(_ *app.App, _ Flags) error {
+		return runInstallDrivers()
 	},
 	"process_data": func(a *app.App, _ Flags) error {
 		return a.ProcessResponses()
@@ -57,8 +57,8 @@ var actionRegistry = map[string]actionFunc{
 		printDescriptionStats(stats)
 		return nil
 	},
-	"serve": func(a *app.App, _ Flags) error {
-		return a.Serve()
+	"serve": func(_ *app.App, _ Flags) error {
+		return runServe()
 	},
 	"save": func(a *app.App, _ Flags) error {
 		_, err := a.ImportDB()
@@ -121,13 +121,15 @@ func closeSessions(application *app.App) {
 }
 
 func newApplication(action string, flags Flags) *app.App {
-	sink := app.NewFileResponseSink()
+	sink := newFileResponseSink()
 
 	return app.New(app.Deps{
-		Sessions: app.NewSessionFactory(blockImagesFor(action), sink, flags.headless),
-		Details:  app.NewFileDetailStore(),
-		PDPState: app.NewFilePDPState(),
+		Sessions: newBrowserSessionFactory(blockImagesFor(action), sink, flags.headless),
+		Details:  newFileDetailStore(),
+		PDPState: newFilePDPState(),
+		PDP:      newPDPFetcher(sink),
 		Sink:     sink,
+		Products: newProductRepository(),
 	})
 }
 

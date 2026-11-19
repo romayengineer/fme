@@ -50,17 +50,18 @@ func TestBlockImagesFor(t *testing.T) {
 func assertDepsWired(t *testing.T, application *app.App) {
 	t.Helper()
 
-	if application.Sessions == nil {
-		t.Error("Sessions is nil")
+	checks := map[string]bool{
+		"Sessions": application.Sessions == nil,
+		"Details":  application.Details == nil,
+		"PDPState": application.PDPState == nil,
+		"Sink":     application.Sink == nil,
+		"PDP":      application.PDP == nil,
+		"Products": application.Products == nil,
 	}
-	if application.Details == nil {
-		t.Error("Details is nil")
-	}
-	if application.PDPState == nil {
-		t.Error("PDPState is nil")
-	}
-	if application.Sink == nil {
-		t.Error("Sink is nil")
+	for name, missing := range checks {
+		if missing {
+			t.Errorf("%s is nil", name)
+		}
 	}
 }
 

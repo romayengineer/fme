@@ -14,7 +14,7 @@ const testSearchQuery = "CometMarketplaceSearchContentPaginationQuery"
 func TestArchiveSearchResponsesMovesOnlyOldSearchFiles(t *testing.T) {
 	t.Chdir(t.TempDir())
 	now := time.Now()
-	friendlyDir := filepath.Join(paths.DataDir, testSearchQuery)
+	friendlyDir := filepath.Join(paths.DataDir(), testSearchQuery)
 
 	oldPath := writeTestResponse(t, friendlyDir, now.Add(-10*24*time.Hour))
 	recentPath := writeTestResponse(t, friendlyDir, now.Add(-1*time.Hour))
@@ -35,7 +35,7 @@ func TestArchiveSearchResponsesMovesOnlyOldSearchFiles(t *testing.T) {
 func TestArchiveSearchResponsesIsIdempotent(t *testing.T) {
 	t.Chdir(t.TempDir())
 	now := time.Now()
-	writeTestResponse(t, filepath.Join(paths.DataDir, testSearchQuery), now.Add(-10*24*time.Hour))
+	writeTestResponse(t, filepath.Join(paths.DataDir(), testSearchQuery), now.Add(-10*24*time.Hour))
 	cutoff := now.Add(-7 * 24 * time.Hour)
 	pruneBefore := now.Add(-30 * 24 * time.Hour)
 

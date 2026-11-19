@@ -1,21 +1,10 @@
 package app
 
-import (
-	"testing"
+import "testing"
 
-	"github.com/romayengineer/fme/go/capture"
-	"github.com/romayengineer/fme/go/core/orderedmap"
-)
-
-func testPDPTemplate() *capture.PDPTemplate {
-	om := orderedmap.NewOrderedMap()
-	om.Set("variables", `{"targetId":"original"}`)
-	return &capture.PDPTemplate{
-		URL:         "https://www.facebook.com/api/graphql/",
-		Method:      "POST",
-		Headers:     map[string]string{"x-fb": "1"},
-		PostDataMap: om,
-	}
+// testTemplate is an opaque stand-in for a captured PDP request.
+func testTemplate() PDPTemplate {
+	return "template"
 }
 
 func TestPullDescriptionsNothingToPullSkipsSession(t *testing.T) {
@@ -38,11 +27,9 @@ func TestPullDescriptionsNothingToPullSkipsSession(t *testing.T) {
 }
 
 func TestPullDescriptionsStopsOnRateLimit(t *testing.T) {
-	t.Chdir(t.TempDir())
-	capture.SetPDPTemplate(*testPDPTemplate())
-
 	page := &fakePage{body: `{"errors":[{"message":"Rate limit exceeded"}]}`}
-	ctx := &fakeContext{page: page}
+	pages := &fakePages{}
+	closer := &fakeCloser{}
 	state := &fakePDPState{}
 	details := &fakeDetails{
 		pending: 1,
@@ -50,10 +37,14 @@ func TestPullDescriptionsStopsOnRateLimit(t *testing.T) {
 	}
 
 	app := New(Deps{
-		Sessions: &fakeSessions{session: &Session{Context: ctx, Waiter: &fakeWaiter{}}},
+		Sessions: &fakeSessions{session: testSession(page, pages, closer, &fakeWaiter{})},
 		Details:  details,
 		PDPState: state,
-		Sink:     &fakeResponseSink{},
+		PDP: &fakePDPFetcher{
+			template: testTemplate(),
+			outcome:  PDPOutcome{RateLimited: true},
+		},
+		Sink: &fakeResponseSink{},
 	})
 
 	result, err := app.PullDescriptions(PullDescriptionsOptions{RateLimitWaitSeconds: 0})
@@ -66,18 +57,18 @@ func TestPullDescriptionsStopsOnRateLimit(t *testing.T) {
 	if len(state.marked) != 0 {
 		t.Errorf("rate-limited listing was marked unavailable: %v", state.marked)
 	}
-	if !ctx.closed {
+	if !closer.closed {
 		t.Error("context was not closed")
 	}
 }
 
 func TestFetchPDPWithBackoffExhaustedBudget(t *testing.T) {
-	template := testPDPTemplate()
-	app := New(Deps{Sink: &fakeResponseSink{}})
+	fetcher := &fakePDPFetcher{outcome: PDPOutcome{RateLimited: true}}
+	app := New(Deps{PDP: fetcher})
 
 	outcome, waited, err := app.fetchPDPWithBackoff(
-		&fakePage{body: `{"errors":[{"message":"Rate limit exceeded"}]}`},
-		template,
+		&fakePage{},
+		testTemplate(),
 		"123",
 		PullDescriptionsOptions{RateLimitWaitSeconds: 1, MaxRateLimitWaitSeconds: 0},
 	)

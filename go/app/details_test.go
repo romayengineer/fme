@@ -7,8 +7,8 @@ import (
 )
 
 func TestGetDetailsOpensListingsWithoutPrice(t *testing.T) {
-	page := &fakePage{}
-	ctx := &fakeContext{page: page}
+	pages := &fakePages{}
+	closer := &fakeCloser{}
 	details := &fakeDetails{
 		details: []map[string]any{
 			{"ID": "123"},
@@ -19,7 +19,7 @@ func TestGetDetailsOpensListingsWithoutPrice(t *testing.T) {
 	paused := false
 
 	app := New(Deps{
-		Sessions: &fakeSessions{session: &Session{Context: ctx, Waiter: &fakeWaiter{}}},
+		Sessions: &fakeSessions{session: testSession(&fakePage{}, pages, closer, &fakeWaiter{})},
 		Details:  details,
 	})
 
@@ -31,23 +31,23 @@ func TestGetDetailsOpensListingsWithoutPrice(t *testing.T) {
 		t.Fatalf("GetDetails: %v", err)
 	}
 
-	assertDetailsVisit(t, page, paused, ctx)
+	assertDetailsVisit(t, pages, paused, closer)
 }
 
 // assertDetailsVisit checks the navigation, pause, and context shutdown.
-func assertDetailsVisit(t *testing.T, page *fakePage, paused bool, ctx *fakeContext) {
+func assertDetailsVisit(t *testing.T, pages *fakePages, paused bool, closer *fakeCloser) {
 	t.Helper()
 
-	if len(page.gotos) != 1 {
-		t.Fatalf("got %d navigations, want 1", len(page.gotos))
+	if len(pages.gotos) != 1 {
+		t.Fatalf("got %d navigations, want 1", len(pages.gotos))
 	}
-	if !strings.Contains(page.gotos[0], "/marketplace/item/123/") {
-		t.Errorf("navigation = %q, want listing 123", page.gotos[0])
+	if !strings.Contains(pages.gotos[0], "/marketplace/item/123/") {
+		t.Errorf("navigation = %q, want listing 123", pages.gotos[0])
 	}
 	if !paused {
 		t.Error("Pause was not called")
 	}
-	if !ctx.closed {
+	if !closer.closed {
 		t.Error("context was not closed")
 	}
 }

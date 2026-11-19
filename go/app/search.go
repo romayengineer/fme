@@ -1,69 +1,6 @@
 package app
 
-import (
-	"errors"
-	"time"
-
-	"github.com/romayengineer/fme/go/browser/marketplace"
-	"github.com/romayengineer/fme/go/store/filestore"
-)
-
-// FileDetailStore adapts the JSON detail store to the DetailStore port.
-type FileDetailStore struct{}
-
-// NewFileDetailStore returns a DetailStore backed by data/__Details.
-func NewFileDetailStore() *FileDetailStore {
-	return &FileDetailStore{}
-}
-
-// ProcessResponses materializes captured responses into data/__Details.
-func (s *FileDetailStore) ProcessResponses(startTime int64) (int64, error) {
-	return filestore.ProcessData(startTime)
-}
-
-// ForEachDetail calls process for every detail record.
-func (s *FileDetailStore) ForEachDetail(process func(filePath string, jsonData map[string]any) bool, sortit bool) (int, error) {
-	return filestore.ForEachDetail(process, sortit)
-}
-
-// LoadPDPProductIDs returns the ids that already have a PDP response.
-func (s *FileDetailStore) LoadPDPProductIDs() map[string]struct{} {
-	return filestore.LoadPDPProductIDs()
-}
-
-// PendingDescriptions counts records still missing a description.
-func (s *FileDetailStore) PendingDescriptions(existing, unavailable map[string]struct{}) (pending, alreadyFetched, unavailableCount int, err error) {
-	return filestore.PendingDescriptionCount(existing, unavailable)
-}
-
-// FillEmpty backfills missing URLs.
-func (s *FileDetailStore) FillEmpty() error {
-	return filestore.FillEmpty()
-}
-
-// DedupePDP removes duplicate PDP response files.
-func (s *FileDetailStore) DedupePDP() {
-	filestore.DedupePDP()
-}
-
-// ArchiveSearchResponses moves processed search responses into data/archived/.
-func (s *FileDetailStore) ArchiveSearchResponses(cutoff, pruneBefore time.Time) (int, int, error) {
-	return filestore.ArchiveSearchResponses(cutoff, pruneBefore)
-}
-
-// DescriptionStats returns description coverage for the store.
-func (s *FileDetailStore) DescriptionStats() (DescriptionStats, error) {
-	stats, err := filestore.ComputeDescriptionStats()
-	if err != nil {
-		return DescriptionStats{}, err
-	}
-	return DescriptionStats{
-		Total:           stats.Total,
-		WithDescription: stats.WithDescription,
-		Unavailable:     stats.Unavailable,
-		Empty:           stats.Empty,
-	}, nil
-}
+import "errors"
 
 // SearchOptions configures a Marketplace search run.
 type SearchOptions struct {
@@ -93,15 +30,10 @@ func (a *App) Search(opts SearchOptions) (SearchResult, error) {
 	}
 	defer a.closeAuthenticatedSession("search", session)
 
-	_, pageHelpers, err := newPageHelpers(session.Context, "search")
-	if err != nil {
-		return SearchResult{}, err
-	}
-
 	result := SearchResult{}
-	runErr := a.runSearch(pageHelpers, opts)
+	runErr := a.runSearch(session.Pages, opts)
 	if runErr == nil {
-		result.Throttled = pageHelpers.IsThrottled()
+		result.Throttled = session.Pages.IsThrottled()
 		a.logSearchThrottle(result)
 	}
 
@@ -120,8 +52,8 @@ func (a *App) logSearchThrottle(result SearchResult) {
 
 // runSearch drives the Marketplace search, logging rather than returning the
 // search error so captured responses are still materialized.
-func (a *App) runSearch(pageHelpers marketplace.PagesInterface, opts SearchOptions) error {
-	if err := pageHelpers.MarketplaceSearch(opts.Keywords, opts.ScrollDown, opts.ScrollSeconds); err != nil {
+func (a *App) runSearch(pages Pages, opts SearchOptions) error {
+	if err := pages.MarketplaceSearch(opts.Keywords, opts.ScrollDown, opts.ScrollSeconds); err != nil {
 		a.Logger.Error("search: run marketplace search", "error", err)
 		return err
 	}

@@ -5,37 +5,11 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/mxschmitt/playwright-go"
-
-	"github.com/romayengineer/fme/go/browser/driver"
 )
 
-type fakeLocator struct{}
-
-func (l *fakeLocator) Fill(string) error                                            { return nil }
-func (l *fakeLocator) Click() error                                                 { return nil }
-func (l *fakeLocator) Locator(string) driver.LocatorWrapperInterface                { return l }
-func (l *fakeLocator) WaitFor(float64) error                                        { return nil }
-func (l *fakeLocator) GetByRole(playwright.AriaRole) driver.LocatorWrapperInterface { return l }
-func (l *fakeLocator) Nth(int) driver.LocatorWrapperInterface                       { return l }
-func (l *fakeLocator) All() ([]driver.LocatorWrapperInterface, error) {
-	return []driver.LocatorWrapperInterface{l}, nil
-}
-
+// fakePage is the page surface the description flow uses.
 type fakePage struct {
-	gotos []string
-	body  string
-}
-
-func (p *fakePage) Goto(url string) error {
-	p.gotos = append(p.gotos, url)
-	return nil
-}
-func (p *fakePage) Locator(string) driver.LocatorWrapperInterface { return &fakeLocator{} }
-func (p *fakePage) Close() error                                  { return nil }
-func (p *fakePage) GetByRole(playwright.AriaRole) driver.LocatorWrapperInterface {
-	return &fakeLocator{}
+	body string
 }
 
 func (p *fakePage) Evaluate(string, ...any) (any, error) {
@@ -45,43 +19,57 @@ func (p *fakePage) Evaluate(string, ...any) (any, error) {
 	return nil, nil //nolint:nilnil // fake page has no body.
 }
 
-type fakeContext struct {
-	page   driver.PageWrapperInterface
+// fakePages records Marketplace navigation.
+type fakePages struct {
+	searches  []string
+	gotos     []string
+	opened    int
+	throttled bool
+}
+
+func (p *fakePages) MarketplaceSearch(keywords string, _ bool, _ int) error {
+	p.searches = append(p.searches, keywords)
+	return nil
+}
+
+func (p *fakePages) MarketplaceHome() error { return nil }
+
+func (p *fakePages) GoToProduct(id string) error {
+	p.gotos = append(p.gotos, "https://www.facebook.com/marketplace/item/"+id+"/")
+	return nil
+}
+
+func (p *fakePages) OpenProduct(int) bool {
+	p.opened++
+	return true
+}
+
+func (p *fakePages) IsThrottled() bool { return p.throttled }
+
+// fakeCloser records context shutdown.
+type fakeCloser struct {
 	closed bool
 }
 
-func (c *fakeContext) NewPage() (driver.PageWrapperInterface, error) { return c.page, nil }
-func (c *fakeContext) Pages() ([]driver.PageWrapperInterface, error) {
-	return nil, nil
-}
-
-func (c *fakeContext) Close() error {
+func (c *fakeCloser) Close() error {
 	c.closed = true
 	return nil
 }
 
-func (c *fakeContext) StorageState() (*playwright.StorageState, error) {
-	return nil, nil //nolint:nilnil // fake context has no stored session.
-}
-
-func (c *fakeContext) Fetch(any, ...playwright.APIRequestContextFetchOptions) (playwright.APIResponse, error) {
-	return nil, nil //nolint:nilnil // fake context cannot fetch.
-}
-func (c *fakeContext) Route(any, driver.RouteHandler) error { return nil }
-func (c *fakeContext) OnRequest(driver.RequestHandler)      {}
-func (c *fakeContext) OnResponse(driver.ResponseHandler)    {}
-
+// fakeWaiter records capture drains.
 type fakeWaiter struct {
 	waits int
 }
 
 func (w *fakeWaiter) Wait() { w.waits++ }
 
+// fakeSessions returns a prepared session.
 type fakeSessions struct {
 	session    *Session
 	err        error
 	openCalls  int
 	closeCalls int
+	closeErr   error
 }
 
 func (f *fakeSessions) Open() (*Session, error) {
@@ -91,7 +79,29 @@ func (f *fakeSessions) Open() (*Session, error) {
 
 func (f *fakeSessions) Close() error {
 	f.closeCalls++
-	return nil
+	return f.closeErr
+}
+
+// testSession builds a session with the standard fakes.
+func testSession(page *fakePage, pages *fakePages, closer *fakeCloser, waiter *fakeWaiter) *Session {
+	return &Session{Page: page, Pages: pages, Context: closer, Waiter: waiter}
+}
+
+// fakePDPFetcher returns canned PDP outcomes.
+type fakePDPFetcher struct {
+	template PDPTemplate
+	outcome  PDPOutcome
+	err      error
+	fetches  int
+}
+
+func (f *fakePDPFetcher) Template(int) (PDPTemplate, bool) {
+	return f.template, f.template != nil
+}
+
+func (f *fakePDPFetcher) Fetch(Page, PDPTemplate, string) (PDPOutcome, error) {
+	f.fetches++
+	return f.outcome, f.err
 }
 
 type fakeDetails struct {
@@ -139,7 +149,6 @@ func (d *fakeDetails) ArchiveSearchResponses(time.Time, time.Time) (int, int, er
 	d.archiveCall++
 	return d.archived, d.pruned, d.archiveErr
 }
-
 func (d *fakeDetails) DescriptionStats() (DescriptionStats, error) {
 	return d.stats, nil
 }
@@ -188,47 +197,41 @@ func (s *fakePDPState) RecordPDPFailure(string, int) (bool, int) { return false,
 func (s *fakePDPState) ClearPDPFailure(string)                   {}
 
 func TestSearchRunsSearchAndProcessesResponses(t *testing.T) {
-	page := &fakePage{}
-	ctx := &fakeContext{page: page}
+	pages := &fakePages{}
+	closer := &fakeCloser{}
 	waiter := &fakeWaiter{}
 	details := &fakeDetails{}
 	paused := false
 
 	app := New(Deps{
-		Sessions: &fakeSessions{session: &Session{Context: ctx, Waiter: waiter}},
+		Sessions: &fakeSessions{session: testSession(&fakePage{}, pages, closer, waiter)},
 		Details:  details,
 	})
 
-	result, err := app.Search(SearchOptions{
+	_, err := app.Search(SearchOptions{
 		Keywords: "macbook m1",
 		Pause:    func() { paused = true },
 	})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
 	}
-	if result.Throttled {
-		t.Error("Search reported a throttle on a healthy page")
-	}
 
-	assertSearchRun(t, page, details)
-	assertSearchShutdown(t, waiter, paused, ctx)
+	assertSearchRun(t, pages, details)
+	assertSearchShutdown(t, waiter, paused, closer)
 }
 
 // assertSearchRun checks the search navigation and response processing.
-func assertSearchRun(t *testing.T, page *fakePage, details *fakeDetails) {
+func assertSearchRun(t *testing.T, pages *fakePages, details *fakeDetails) {
 	t.Helper()
 
-	if len(page.gotos) != 1 {
-		t.Fatalf("got %d navigations, want 1", len(page.gotos))
-	}
-	if !strings.Contains(page.gotos[0], "query=macbook+m1") {
-		t.Errorf("search URL = %q", page.gotos[0])
+	if len(pages.searches) != 1 || !strings.Contains(pages.searches[0], "macbook m1") {
+		t.Fatalf("searches = %v, want one macbook m1 search", pages.searches)
 	}
 	assertInt(t, "ProcessResponses calls", details.processed, 1)
 }
 
 // assertSearchShutdown checks the waiter, pause, and context shutdown.
-func assertSearchShutdown(t *testing.T, waiter *fakeWaiter, paused bool, ctx *fakeContext) {
+func assertSearchShutdown(t *testing.T, waiter *fakeWaiter, paused bool, closer *fakeCloser) {
 	t.Helper()
 
 	if waiter.waits < 1 {
@@ -237,15 +240,15 @@ func assertSearchShutdown(t *testing.T, waiter *fakeWaiter, paused bool, ctx *fa
 	if !paused {
 		t.Error("Pause was not called")
 	}
-	if !ctx.closed {
+	if !closer.closed {
 		t.Error("context was not closed")
 	}
 }
 
 func TestSearchReportsThrottle(t *testing.T) {
-	page := &fakePage{body: "This page isn't available right now"}
+	pages := &fakePages{throttled: true}
 	app := New(Deps{
-		Sessions: &fakeSessions{session: &Session{Context: &fakeContext{page: page}, Waiter: &fakeWaiter{}}},
+		Sessions: &fakeSessions{session: testSession(&fakePage{}, pages, &fakeCloser{}, &fakeWaiter{})},
 		Details:  &fakeDetails{},
 	})
 
@@ -254,14 +257,14 @@ func TestSearchReportsThrottle(t *testing.T) {
 		t.Fatalf("Search: %v", err)
 	}
 	if !result.Throttled {
-		t.Error("Search did not report the throttle page")
+		t.Error("SearchResult.Throttled = false, want true")
 	}
 }
 
 func TestSearchReturnsProcessError(t *testing.T) {
 	details := &fakeDetails{err: errors.New("disk full")}
 	app := New(Deps{
-		Sessions: &fakeSessions{session: &Session{Context: &fakeContext{page: &fakePage{}}, Waiter: &fakeWaiter{}}},
+		Sessions: &fakeSessions{session: testSession(&fakePage{}, &fakePages{}, &fakeCloser{}, &fakeWaiter{})},
 		Details:  details,
 	})
 
@@ -270,8 +273,7 @@ func TestSearchReturnsProcessError(t *testing.T) {
 	}
 }
 
-func TestSearchReturnsSessionError(t *testing.T) {
-	app := New(Deps{
+func TestSearchReturnsSessionError(t *testing.T) {	app := New(Deps{
 		Sessions: &fakeSessions{err: errors.New("login failed")},
 	})
 

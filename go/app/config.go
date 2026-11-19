@@ -9,14 +9,19 @@ import (
 
 	"github.com/joho/godotenv"
 
-	"github.com/romayengineer/fme/go/browser/facebook"
 	"github.com/romayengineer/fme/go/core/logging"
 )
+
+// Credentials is the username/password pair for a credential login.
+type Credentials struct {
+	Username string
+	Password string
+}
 
 // Config is the browser/session configuration read from .env and the process
 // environment.
 type Config struct {
-	UserCredentials  facebook.UserCredentials
+	UserCredentials  Credentials
 	UserDataDir      string
 	BrowserChannel   string
 	ProfileDirectory string
@@ -55,7 +60,7 @@ func LoadConfig() (*Config, error) {
 // configFromEnv reads every session setting from the environment.
 func configFromEnv() *Config {
 	return &Config{
-		UserCredentials: facebook.UserCredentials{
+		UserCredentials: Credentials{
 			Username: os.Getenv("FME_USERNAME"),
 			Password: os.Getenv("FME_PASSWORD"),
 		},

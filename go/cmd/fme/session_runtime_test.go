@@ -1,4 +1,4 @@
-package app
+package main
 
 import (
 	"testing"
@@ -21,7 +21,7 @@ func (f *fakePlaywrightRuntime) Stop() error {
 func TestBrowserSessionFactoryReusesRuntime(t *testing.T) {
 	runtime := &fakePlaywrightRuntime{}
 	created := 0
-	factory := &BrowserSessionFactory{
+	factory := &browserSessionFactory{
 		newPlaywright: func() (driver.PlaywrightWrapperInterface, error) {
 			created++
 			return runtime, nil
@@ -45,7 +45,7 @@ func TestBrowserSessionFactoryReusesRuntime(t *testing.T) {
 }
 
 // assertCloseStopsRuntime closes the factory and checks the cumulative stops.
-func assertCloseStopsRuntime(t *testing.T, factory *BrowserSessionFactory, runtime *fakePlaywrightRuntime, want int) {
+func assertCloseStopsRuntime(t *testing.T, factory *browserSessionFactory, runtime *fakePlaywrightRuntime, want int) {
 	t.Helper()
 
 	if err := factory.Close(); err != nil {

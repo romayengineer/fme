@@ -34,23 +34,23 @@ func testScheduleOptions(t *testing.T, terms []string, now time.Time) ScheduleOp
 }
 
 // testScheduleApp builds an app with a fake browser and detail store.
-func testScheduleApp(t *testing.T) (*App, *fakePage, *fakeDetails) {
+func testScheduleApp(t *testing.T) (*App, *fakePages, *fakeDetails) {
 	t.Helper()
 
-	page := &fakePage{}
+	pages := &fakePages{}
 	details := &fakeDetails{}
 	app := New(Deps{
-		Sessions: &fakeSessions{session: &Session{Context: &fakeContext{page: page}, Waiter: &fakeWaiter{}}},
+		Sessions: &fakeSessions{session: testSession(&fakePage{}, pages, &fakeCloser{}, &fakeWaiter{})},
 		Details:  details,
 		PDPState: &fakePDPState{},
 		Sink:     &fakeResponseSink{},
 	})
-	return app, page, details
+	return app, pages, details
 }
 
 func TestRunScheduleSearchesTermsAndMaintains(t *testing.T) {
 	now := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
-	app, page, details := testScheduleApp(t)
+	app, pages, details := testScheduleApp(t)
 	sleeps := &sleepRecorder{}
 	opts := testScheduleOptions(t, []string{"macbook m1", "iphone 16"}, now)
 	opts.PerTermDelay = 10 * time.Minute
@@ -61,7 +61,7 @@ func TestRunScheduleSearchesTermsAndMaintains(t *testing.T) {
 		t.Fatalf("RunSchedule: %v", err)
 	}
 
-	assertSearches(t, page, 2)
+	assertSearches(t, pages, 2)
 	assertCycleMaintenance(t, details)
 	assertSleeps(t, sleeps, []time.Duration{10 * time.Minute})
 
@@ -71,8 +71,8 @@ func TestRunScheduleSearchesTermsAndMaintains(t *testing.T) {
 
 func TestRunScheduleBacksOffOnSearchThrottle(t *testing.T) {
 	now := time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
-	app, page, details := testScheduleApp(t)
-	page.body = "This page isn't available right now"
+	app, pages, details := testScheduleApp(t)
+	pages.throttled = true
 	opts := testScheduleOptions(t, []string{"macbook m1"}, now)
 
 	if err := app.RunSchedule(context.Background(), opts); err != nil {
@@ -170,14 +170,14 @@ func TestRunScheduleRequiresTerms(t *testing.T) {
 }
 
 // assertSearches checks the number of Marketplace searches and their order.
-func assertSearches(t *testing.T, page *fakePage, want int) {
+func assertSearches(t *testing.T, pages *fakePages, want int) {
 	t.Helper()
 
-	if len(page.gotos) != want {
-		t.Fatalf("searches = %d, want %d (%v)", len(page.gotos), want, page.gotos)
+	if len(pages.searches) != want {
+		t.Fatalf("searches = %d, want %d (%v)", len(pages.searches), want, pages.searches)
 	}
-	if !strings.Contains(page.gotos[0], "query=macbook+m1") {
-		t.Errorf("first search URL = %q", page.gotos[0])
+	if !strings.Contains(pages.searches[0], "macbook m1") {
+		t.Errorf("first search = %q", pages.searches[0])
 	}
 }
 

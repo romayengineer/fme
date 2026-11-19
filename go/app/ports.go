@@ -8,17 +8,47 @@ package app
 import (
 	"log/slog"
 	"time"
-
-	"github.com/romayengineer/fme/go/marketplace/model"
 )
 
-// SessionFactory opens an authenticated browser context. Implementations live
-// in the browser module; tests provide a fake context.
-type SessionFactory interface {
-	// Open returns an authenticated browser session.
-	Open() (*Session, error)
-	// Close stops the shared Playwright runtime, if one was started.
-	Close() error
+// Page is the page surface the description flow needs.
+type Page interface {
+	// Evaluate runs a JavaScript expression in the page.
+	Evaluate(expression string, arg ...any) (any, error)
+}
+
+// Pages drives Marketplace navigation. Implementations live in the browser
+// module; tests provide a fake.
+type Pages interface {
+	// MarketplaceSearch opens a Marketplace search for the keywords.
+	MarketplaceSearch(searchKeywords string, scrollDown bool, scrollSeconds int) error
+	// MarketplaceHome opens the Marketplace home page.
+	MarketplaceHome() error
+	// GoToProduct navigates directly to a listing URL.
+	GoToProduct(id string) error
+	// OpenProduct clicks the listing at index.
+	OpenProduct(index int) bool
+	// IsThrottled reports whether the last navigation hit Facebook's
+	// throttling page.
+	IsThrottled() bool
+}
+
+// PDPTemplate is an opaque request template captured from Facebook. The
+// composition root supplies the concrete capture type.
+type PDPTemplate any
+
+// PDPOutcome reports the result of a PDP replay.
+type PDPOutcome struct {
+	RateLimited bool // Facebook rate-limited the request
+	Gone        bool // the listing no longer exists (definitive)
+	NoProduct   bool // fetched but no listing was found (ambiguous failure)
+}
+
+// PDPFetcher captures and replays Marketplace PDP requests.
+type PDPFetcher interface {
+	// Template waits up to timeoutSeconds for a captured PDP request.
+	Template(timeoutSeconds int) (PDPTemplate, bool)
+	// Fetch replays template for productID and returns the outcome.
+	Fetch(page Page, template PDPTemplate, productID string) (PDPOutcome, error)
 }
 
 // DetailStore is the application view of the data/__Details store.
@@ -70,12 +100,11 @@ type ResponseSink interface {
 	WriteDebugMiss(productID string, body []byte) error
 }
 
-// ProductRepository persists Marketplace listings in the database.
+// ProductRepository persists raw detail records in the database. The adapter
+// owns the model mapping, so app does not depend on the storage model.
 type ProductRepository interface {
-	// SaveProduct upserts one product and returns its row id.
-	SaveProduct(product model.MarketplaceItemDetails) (string, error)
-	// SaveProducts upserts a batch and returns how many were stored.
-	SaveProducts(products []model.MarketplaceItemDetails) (int, error)
+	// SaveDetailRecords upserts a batch and returns how many were stored.
+	SaveDetailRecords(records []map[string]any) (int, error)
 }
 
 // Deps is the set of implementations a use case needs. Construct it once in the
@@ -84,6 +113,7 @@ type Deps struct {
 	Sessions SessionFactory
 	Details  DetailStore
 	PDPState PDPState
+	PDP      PDPFetcher
 	Sink     ResponseSink
 	Products ProductRepository
 	Logger   *slog.Logger

@@ -1,11 +1,6 @@
 package app
 
-import (
-	"fmt"
-
-	"github.com/romayengineer/fme/go/browser/driver"
-	"github.com/romayengineer/fme/go/browser/marketplace"
-)
+import "fmt"
 
 // firstError returns current when it is set, otherwise next.
 func firstError(current, next error) error {
@@ -40,20 +35,6 @@ func (a *App) closeAuthenticatedSession(action string, session *Session) {
 	if err := session.Context.Close(); err != nil {
 		a.Logger.Error(action+": close browser context", "error", err)
 	}
-}
-
-// newPageHelpers opens a page in ctx and returns it plus the Marketplace helpers.
-func newPageHelpers(ctx driver.ContextWrapperInterface, action string) (driver.PageWrapperInterface, marketplace.PagesInterface, error) {
-	page, err := ctx.NewPage()
-	if err != nil {
-		return nil, nil, fmt.Errorf("%s: create page: %w", action, err)
-	}
-
-	pageHelpers, err := marketplace.NewPages(page)
-	if err != nil {
-		return nil, nil, fmt.Errorf("%s: create page helpers: %w", action, err)
-	}
-	return page, pageHelpers, nil
 }
 
 // processResponses materializes captured responses, preserving an earlier error.

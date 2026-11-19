@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/romayengineer/fme/go/browser/driver"
-	"github.com/romayengineer/fme/go/browser/marketplace"
 	"github.com/romayengineer/fme/go/core/jsonutil"
 )
 
@@ -30,12 +28,7 @@ func (a *App) GetDetails(opts GetDetailsOptions) error {
 	}
 	defer a.closeAuthenticatedSession("get-details", session)
 
-	_, pageHelpers, err := newPageHelpers(session.Context, "get-details")
-	if err != nil {
-		return err
-	}
-
-	if err := a.visitDetails(pageHelpers, detailDelay(opts.Delay)); err != nil {
+	if err := a.visitDetails(session.Pages, detailDelay(opts.Delay)); err != nil {
 		return err
 	}
 
@@ -63,9 +56,9 @@ func detailDelay(delay time.Duration) time.Duration {
 }
 
 // visitDetails opens each detail record that is missing a price.
-func (a *App) visitDetails(pageHelpers marketplace.PagesInterface, delay time.Duration) error {
+func (a *App) visitDetails(pages Pages, delay time.Duration) error {
 	_, err := a.Details.ForEachDetail(func(filePath string, jsonData map[string]any) bool {
-		return a.visitDetail(pageHelpers, delay, filePath, jsonData)
+		return a.visitDetail(pages, delay, filePath, jsonData)
 	}, false)
 	if err != nil {
 		return fmt.Errorf("get-details: iterate details: %w", err)
@@ -74,7 +67,7 @@ func (a *App) visitDetails(pageHelpers marketplace.PagesInterface, delay time.Du
 }
 
 // visitDetail opens one listing, when it still needs a price.
-func (a *App) visitDetail(pageHelpers marketplace.PagesInterface, delay time.Duration, filePath string, jsonData map[string]any) bool {
+func (a *App) visitDetail(pages Pages, delay time.Duration, filePath string, jsonData map[string]any) bool {
 	if jsonutil.GetKey(jsonData, "PriceAmount") != nil {
 		return true
 	}
@@ -85,28 +78,11 @@ func (a *App) visitDetail(pageHelpers marketplace.PagesInterface, delay time.Dur
 		return true
 	}
 
-	if err := pageHelpers.GoToProduct(productID); err != nil {
+	if err := pages.GoToProduct(productID); err != nil {
 		a.Logger.Error("get-details: open product", "productID", productID, "error", err)
 		return true
 	}
 	time.Sleep(delay)
 
 	return true
-}
-
-// InstallDrivers downloads the Playwright driver and Chromium ahead of time.
-func (a *App) InstallDrivers() error {
-	fmt.Println("Installing Playwright driver and Chromium (this may take a while)...")
-
-	wrapper, err := driver.NewPlaywrightWrapper()
-	if err != nil {
-		return fmt.Errorf("install playwright drivers: %w", err)
-	}
-
-	if err := wrapper.Stop(); err != nil {
-		a.Logger.Error("install-drivers: stop playwright", "error", err)
-	}
-
-	a.Logger.Info("install-drivers: playwright driver and chromium are installed")
-	return nil
 }

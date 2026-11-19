@@ -276,11 +276,7 @@ linters:
           allow:
             - "$gostd"
             - "github.com/joho/godotenv"
-            - "github.com/romayengineer/fme/go/browser"
-            - "github.com/romayengineer/fme/go/capture"
             - "github.com/romayengineer/fme/go/core"
-            - "github.com/romayengineer/fme/go/marketplace/model"
-            - "github.com/romayengineer/fme/go/store"
 
         app_tests:
           files:
@@ -288,12 +284,7 @@ linters:
           allow:
             - "$gostd"
             - "github.com/joho/godotenv"
-            - "github.com/mxschmitt/playwright-go"
-            - "github.com/romayengineer/fme/go/browser"
-            - "github.com/romayengineer/fme/go/capture"
             - "github.com/romayengineer/fme/go/core"
-            - "github.com/romayengineer/fme/go/marketplace/model"
-            - "github.com/romayengineer/fme/go/store"
 
         cmd:
           files:
@@ -302,7 +293,11 @@ linters:
             - "$gostd"
             - "github.com/romayengineer/fme/go/analytics"
             - "github.com/romayengineer/fme/go/app"
+            - "github.com/romayengineer/fme/go/browser"
+            - "github.com/romayengineer/fme/go/capture"
             - "github.com/romayengineer/fme/go/core"
+            - "github.com/romayengineer/fme/go/marketplace"
+            - "github.com/romayengineer/fme/go/store"
 
         # Test-only dependency used outside test files.
         no_test_deps_in_prod:

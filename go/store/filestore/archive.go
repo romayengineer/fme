@@ -48,7 +48,7 @@ func archiveOldResponses(cutoff time.Time) (int, error) {
 
 // responseSourceDirs returns the data subdirectories that may hold search responses.
 func responseSourceDirs() ([]string, error) {
-	entries, err := os.ReadDir(paths.DataDir)
+	entries, err := os.ReadDir(paths.DataDir())
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
@@ -59,7 +59,7 @@ func responseSourceDirs() ([]string, error) {
 	dirs := make([]string, 0, len(entries))
 	for _, entry := range entries {
 		if isResponseSource(entry) {
-			dirs = append(dirs, filepath.Join(paths.DataDir, entry.Name()))
+			dirs = append(dirs, filepath.Join(paths.DataDir(), entry.Name()))
 		}
 	}
 	return dirs, nil

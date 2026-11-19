@@ -1,20 +1,18 @@
 package app
 
-import (
-	"fmt"
-	"sync"
-
-	"github.com/romayengineer/fme/go/browser/driver"
-	"github.com/romayengineer/fme/go/browser/facebook"
-	"github.com/romayengineer/fme/go/capture"
-	"github.com/romayengineer/fme/go/core/logging"
-)
-
-// Session is one authenticated browser context plus the capture handlers that
-// must be drained before the context is closed.
+// Session is one authenticated browser context plus the page surfaces and the
+// capture handlers that must be drained before it is closed.
 type Session struct {
-	Context driver.ContextWrapperInterface
+	Page    Page
+	Pages   Pages
 	Waiter  Waiter
+	Context Closer
+}
+
+// Closer closes the underlying browser context.
+type Closer interface {
+	// Close closes the underlying browser context.
+	Close() error
 }
 
 // Waiter lets a use case wait for in-flight response handlers without depending
@@ -24,128 +22,11 @@ type Waiter interface {
 	Wait()
 }
 
-// BrowserSessionFactory opens Playwright and restores a Facebook session from
-// a persistent Chrome profile or saved credentials.
-type BrowserSessionFactory struct {
-	BlockImages bool
-	Sink        capture.Sink
-	// Headless overrides the browser mode when non-nil (from -headless).
-	Headless *bool
-
-	// mu guards playwright so concurrent opens share one runtime.
-	mu sync.Mutex
-	// playwright is the lazily started runtime, reused across sessions. A
-	// long-running scheduler must not start (and leak) one driver per cycle.
-	playwright driver.PlaywrightWrapperInterface
-	// newPlaywright starts a runtime; tests replace it with a fake.
-	newPlaywright func() (driver.PlaywrightWrapperInterface, error)
-}
-
-// NewSessionFactory returns a factory that configures the browser for the
-// current action. headless is the -headless override, or nil to let
-// FME_HEADLESS and the available display decide. The .env file is read lazily
-// in Open, so actions such as install_drivers work before credentials are
-// configured.
-func NewSessionFactory(blockImages bool, sink capture.Sink, headless *bool) *BrowserSessionFactory {
-	return &BrowserSessionFactory{
-		BlockImages:   blockImages,
-		Sink:          sink,
-		Headless:      headless,
-		newPlaywright: driver.NewPlaywrightWrapper,
-	}
-}
-
-// Open implements SessionFactory.
-func (f *BrowserSessionFactory) Open() (*Session, error) {
-	config, err := LoadConfig()
-	if err != nil {
-		return nil, err
-	}
-
-	headless := ResolveHeadless(f.Headless, config.Headless)
-	logging.LogInfo0("session", "browser mode", "headless", headless)
-
-	playwrightWrapper, err := f.runtime()
-	if err != nil {
-		return nil, fmt.Errorf("start playwright: %w", err)
-	}
-
-	ctx, err := openContext(playwrightWrapper, config, headless)
-	if err != nil {
-		// Drop the runtime so the next scheduler cycle starts a fresh driver
-		// instead of reusing one that may be wedged.
-		_ = f.Close()
-		return nil, err
-	}
-
-	handlers := capture.SetContextEventHandlers(ctx, f.BlockImages, f.Sink)
-
-	return &Session{Context: ctx, Waiter: handlers}, nil
-}
-
-// runtime returns the shared Playwright runtime, starting it on first use.
-func (f *BrowserSessionFactory) runtime() (driver.PlaywrightWrapperInterface, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	if f.playwright != nil {
-		return f.playwright, nil
-	}
-
-	wrapper, err := f.newPlaywright()
-	if err != nil {
-		return nil, err
-	}
-	f.playwright = wrapper
-	return wrapper, nil
-}
-
-// Close stops the shared Playwright runtime. It is safe to call repeatedly and
-// is a no-op before the first Open.
-func (f *BrowserSessionFactory) Close() error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	if f.playwright == nil {
-		return nil
-	}
-
-	err := f.playwright.Stop()
-	f.playwright = nil
-	return err
-}
-
-// openContext restores the configured profile or logs in with credentials.
-func openContext(wrapper driver.PlaywrightWrapperInterface, config *Config, headless bool) (driver.ContextWrapperInterface, error) {
-	if config.UserDataDir != "" {
-		return openPersistentContext(wrapper, config, headless)
-	}
-	return openBrowserSession(wrapper, config, headless)
-}
-
-// openPersistentContext launches the configured Chrome profile, then waits for
-// the existing Facebook session.
-func openPersistentContext(wrapper driver.PlaywrightWrapperInterface, config *Config, headless bool) (driver.ContextWrapperInterface, error) {
-	ctx, err := wrapper.LaunchPersistentContext(config.UserDataDir, config.BrowserChannel, config.ProfileDirectory, headless)
-	if err != nil {
-		return nil, fmt.Errorf("launch persistent context: %w", err)
-	}
-	if err := facebook.EnsureLoggedIn(ctx); err != nil {
-		return nil, fmt.Errorf("ensure logged in: %w", err)
-	}
-	return ctx, nil
-}
-
-// openBrowserSession launches a fresh browser and logs in with credentials.
-func openBrowserSession(wrapper driver.PlaywrightWrapperInterface, config *Config, headless bool) (driver.ContextWrapperInterface, error) {
-	browser, err := wrapper.NewBrowser(headless)
-	if err != nil {
-		return nil, fmt.Errorf("launch browser: %w", err)
-	}
-
-	ctx, err := facebook.NewScrapper(browser).Login(config.UserCredentials)
-	if err != nil {
-		return nil, fmt.Errorf("login: %w", err)
-	}
-	return ctx, nil
+// SessionFactory opens an authenticated browser session. Implementations live
+// in the composition root; tests provide a fake.
+type SessionFactory interface {
+	// Open returns an authenticated browser session.
+	Open() (*Session, error)
+	// Close stops the shared browser runtime, if one was started.
+	Close() error
 }

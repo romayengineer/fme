@@ -60,17 +60,17 @@ func PDPDebugDir() string {
 // ArchivedDir is the directory of processed raw responses that were moved out
 // of the data root. Walkers ignore it because its path contains "archived".
 func ArchivedDir() string {
-	return filepath.Join(DataDir, ArchivedDirName)
+	return filepath.Join(DataDir(), ArchivedDirName)
 }
 
 // SchedulerStatePath is the durable scheduler state file.
 func SchedulerStatePath() string {
-	return filepath.Join(DataDir, SchedulerStateFile)
+	return filepath.Join(DataDir(), SchedulerStateFile)
 }
 
 // SchedulerLockPath is the scheduler's single-instance lock file.
 func SchedulerLockPath() string {
-	return filepath.Join(DataDir, SchedulerLockFile)
+	return filepath.Join(DataDir(), SchedulerLockFile)
 }
 
 // DetailFileName returns the deterministic filename for a product detail.

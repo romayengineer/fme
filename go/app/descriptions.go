@@ -6,12 +6,12 @@ import (
 	"math/rand/v2"
 	"time"
 
-	"github.com/romayengineer/fme/go/browser/driver"
-	"github.com/romayengineer/fme/go/browser/marketplace"
-	"github.com/romayengineer/fme/go/capture"
 	"github.com/romayengineer/fme/go/core/jsonutil"
-	"github.com/romayengineer/fme/go/store/pdpstate"
 )
+
+// defaultMissThreshold is how many ambiguous "no product" PDP fetches a listing
+// may accumulate before the pass writes it off as no-longer-available.
+const defaultMissThreshold = 3
 
 // PullDescriptionsOptions configures the description fill pass.
 type PullDescriptionsOptions struct {
@@ -75,7 +75,7 @@ func (a *App) PullDescriptions(opts PullDescriptionsOptions) (PullResult, error)
 		return PullResult{}, runErr
 	}
 
-	session, page, pageHelpers, err := a.startPullSession()
+	session, err := a.startPullSession()
 	if err != nil {
 		return PullResult{}, err
 	}
@@ -87,7 +87,7 @@ func (a *App) PullDescriptions(opts PullDescriptionsOptions) (PullResult, error)
 		existing:    plan.existing,
 		unavailable: plan.unavailable,
 	}
-	runErr = a.pullAll(state, page, pageHelpers, runErr)
+	runErr = a.pullAll(state, session.Page, session.Pages, runErr)
 	a.logPullSummary(state)
 
 	return state.result(plan.pending), a.finishCapture(session, "pull-description", runErr)
@@ -139,31 +139,25 @@ func (a *App) loadUnavailable(opts PullDescriptionsOptions) map[string]struct{} 
 	return map[string]struct{}{}
 }
 
-// startPullSession opens the session, page, and helpers used for the pass.
-func (a *App) startPullSession() (*Session, driver.PageWrapperInterface, marketplace.PagesInterface, error) {
+// startPullSession opens the session and its page surfaces.
+func (a *App) startPullSession() (*Session, error) {
 	session, err := a.openAuthenticatedSession("pull-description")
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 
-	page, pageHelpers, err := newPageHelpers(session.Context, "pull-description")
-	if err != nil {
+	if err := session.Pages.MarketplaceHome(); err != nil {
 		a.closeAuthenticatedSession("pull-description", session)
-		return nil, nil, nil, err
+		return nil, fmt.Errorf("pull-description: open marketplace home: %w", err)
 	}
 
-	if err := pageHelpers.MarketplaceHome(); err != nil {
-		a.closeAuthenticatedSession("pull-description", session)
-		return nil, nil, nil, fmt.Errorf("pull-description: open marketplace home: %w", err)
-	}
-
-	return session, page, pageHelpers, nil
+	return session, nil
 }
 
 // pullAll captures the PDP template and replays it for every pending listing.
-func (a *App) pullAll(state *pullState, page driver.PageWrapperInterface, pageHelpers marketplace.PagesInterface, runErr error) error {
+func (a *App) pullAll(state *pullState, page Page, pages Pages, runErr error) error {
 	fmt.Println("Opening a listing to capture the PDP request template...")
-	template := a.capturePDPTemplate(pageHelpers, page)
+	template := a.capturePDPTemplate(pages, page)
 	if template == nil {
 		return errors.New("pull-description: did not capture the PDP request template: Facebook is likely throttling this session (error 1675004); wait and retry later")
 	}
@@ -176,14 +170,14 @@ func (a *App) pullAll(state *pullState, page driver.PageWrapperInterface, pageHe
 }
 
 // handleDetail returns the ForEachDetail callback for the pass.
-func (s *pullState) handleDetail(page driver.PageWrapperInterface, template *capture.PDPTemplate) func(string, map[string]any) bool {
+func (s *pullState) handleDetail(page Page, template PDPTemplate) func(string, map[string]any) bool {
 	return func(_ string, jsonData map[string]any) bool {
 		return s.processDetail(page, template, jsonData)
 	}
 }
 
 // processDetail handles one detail record.
-func (s *pullState) processDetail(page driver.PageWrapperInterface, template *capture.PDPTemplate, jsonData map[string]any) bool {
+func (s *pullState) processDetail(page Page, template PDPTemplate, jsonData map[string]any) bool {
 	productID, ok := s.pendingProductID(jsonData)
 	if !ok {
 		return true
@@ -219,7 +213,7 @@ func (s *pullState) alreadyHandled(productID string) bool {
 }
 
 // pullOne replays the PDP request for one listing and records the outcome.
-func (s *pullState) pullOne(page driver.PageWrapperInterface, template *capture.PDPTemplate, productID string) bool {
+func (s *pullState) pullOne(page Page, template PDPTemplate, productID string) bool {
 	outcome, waited, err := s.app.fetchPDPWithBackoff(page, template, productID, s.opts)
 	s.waitedSeconds += waited
 
@@ -264,7 +258,7 @@ func (s *pullState) handleNoProduct(productID string) {
 		return
 	}
 
-	became, count := s.app.PDPState.RecordPDPFailure(productID, pdpstate.DefaultMissThreshold)
+	became, count := s.app.PDPState.RecordPDPFailure(productID, defaultMissThreshold)
 	if became {
 		s.unavailable[productID] = struct{}{}
 		s.unavailableCount++
@@ -274,7 +268,7 @@ func (s *pullState) handleNoProduct(productID string) {
 	}
 
 	s.app.Logger.Warn("pull-description: PDP response had no listing, will retry",
-		"productID", productID, "misses", count, "threshold", pdpstate.DefaultMissThreshold)
+		"productID", productID, "misses", count, "threshold", defaultMissThreshold)
 }
 
 // handleSuccess clears failure state and records the new response.
@@ -333,11 +327,20 @@ func (a *App) logPullSummary(state *pullState) {
 // fetchPDPWithBackoff fetches a PDP and, if Facebook rate-limits the request
 // (error code 1675004), waits and retries until the limit clears or the per-run
 // waiting budget is exhausted.
-func (a *App) fetchPDPWithBackoff(page driver.PageWrapperInterface, template *capture.PDPTemplate, productID string, opts PullDescriptionsOptions) (capture.PDPOutcome, int, error) {
+func (a *App) fetchPDPWithBackoff(page Page, template PDPTemplate, productID string, opts PullDescriptionsOptions) (PDPOutcome, int, error) {
+	if a.PDP == nil {
+		return PDPOutcome{}, 0, errors.New("pull-description: PDP fetcher is not configured")
+	}
+
+	return a.fetchWithRetry(page, template, productID, opts)
+}
+
+// fetchWithRetry replays the PDP until it succeeds or the wait budget is spent.
+func (a *App) fetchWithRetry(page Page, template PDPTemplate, productID string, opts PullDescriptionsOptions) (PDPOutcome, int, error) {
 	waited := 0
 	wait := opts.RateLimitWaitSeconds
 	for {
-		outcome, err := capture.FetchPDP(page, template, productID, a.Sink)
+		outcome, err := a.PDP.Fetch(page, template, productID)
 		if err != nil {
 			return outcome, waited, err
 		}
@@ -386,37 +389,49 @@ type pdpPage interface {
 
 // capturePDPTemplate clicks listings until the browser issues a
 // MarketplacePDPContainerQuery, which provides the reusable request template.
-func (a *App) capturePDPTemplate(pageHelpers pdpPage, page driver.PageWrapperInterface) *capture.PDPTemplate {
+func (a *App) capturePDPTemplate(pages pdpPage, page Page) PDPTemplate {
+	if a.PDP == nil {
+		return nil
+	}
+
 	const maxAttempts = 6
 	for attempt := range maxAttempts {
-		if attempt > 0 {
-			a.returnToMarketplace(pageHelpers, attempt)
-		}
-
-		if !pageHelpers.OpenProduct(attempt) {
-			a.Logger.Warn("pull-description: could not open a listing for the template", "attempt", attempt)
-			continue
-		}
-		if template := waitForPDPTemplate(15); template != nil {
+		if template, ok := a.tryTemplate(pages, page, attempt); ok {
 			return template
 		}
-
-		a.logThrottleHint(page)
-		a.Logger.Warn("pull-description: no PDP request captured, trying another listing", "attempt", attempt)
 	}
 	return nil
 }
 
+// tryTemplate opens one listing and waits for its PDP request.
+func (a *App) tryTemplate(pages pdpPage, page Page, attempt int) (PDPTemplate, bool) {
+	if attempt > 0 {
+		a.returnToMarketplace(pages, attempt)
+	}
+
+	if !pages.OpenProduct(attempt) {
+		a.Logger.Warn("pull-description: could not open a listing for the template", "attempt", attempt)
+		return nil, false
+	}
+	if template, ok := a.PDP.Template(15); ok {
+		return template, true
+	}
+
+	a.logThrottleHint(page)
+	a.Logger.Warn("pull-description: no template captured, trying another listing", "attempt", attempt)
+	return nil, false
+}
+
 // returnToMarketplace reopens the Marketplace home page between attempts.
-func (a *App) returnToMarketplace(pageHelpers pdpPage, attempt int) {
-	if err := pageHelpers.MarketplaceHome(); err != nil {
+func (a *App) returnToMarketplace(pages pdpPage, attempt int) {
+	if err := pages.MarketplaceHome(); err != nil {
 		a.Logger.Warn("pull-description: could not return to marketplace", "attempt", attempt, "error", err)
 	}
 	time.Sleep(2 * time.Second)
 }
 
 // logThrottleHint reports Facebook's error page, a sign of throttling.
-func (a *App) logThrottleHint(page driver.PageWrapperInterface) {
+func (a *App) logThrottleHint(page Page) {
 	throttled, err := page.Evaluate(`document.body.innerText.includes("This page isn't available right now")`)
 	if err != nil {
 		return
@@ -424,16 +439,4 @@ func (a *App) logThrottleHint(page driver.PageWrapperInterface) {
 	if isThrottled, ok := throttled.(bool); ok && isThrottled {
 		a.Logger.Warn("pull-description: Facebook is serving its error page for this session (likely throttled, code 1675004)")
 	}
-}
-
-// waitForPDPTemplate polls for the captured template until the timeout.
-func waitForPDPTemplate(timeoutSeconds int) *capture.PDPTemplate {
-	deadline := time.Now().Add(time.Duration(timeoutSeconds) * time.Second)
-	for time.Now().Before(deadline) {
-		if template, ok := capture.GetPDPTemplate(); ok {
-			return template
-		}
-		time.Sleep(250 * time.Millisecond)
-	}
-	return nil
 }
