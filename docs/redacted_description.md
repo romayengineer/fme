@@ -92,6 +92,25 @@ Run it with `just pull-description` (optionally `-delay-ms=N`).
 `just process-data` runs the extraction step (`ProcessData`) on its own, without a
 browser, if you ever need to materialize responses manually.
 
+### One-time CreationTime backfill
+
+`ProcessData` re-reads every retained response, not just new ones, and the detail
+store merges non-nil fields. Running it therefore backfills `CreationTime` into
+detail records that were materialized before the search extractor read
+`listing.creation_time`:
+
+```bash
+just process-data   # re-extract data/CometMarketplaceSearchContentPaginationQuery/*
+just save           # upsert detail records; creation_time = excluded.creation_time
+```
+
+The search extractor now reads `node.listing.creation_time` (epoch seconds) and
+falls back to `if_gk_just_listed_tag_on_search_feed.creation_time`. Existing
+`Description`, `Locations`, and `Price` values are untouched because only non-nil
+fields are merged. Records that never appeared in a retained search response and
+whose PDP payload had no `creation_time` stay null; re-running is safe and
+idempotent.
+
 Responses are written **once per product id** at
 `data/MarketplacePDPContainerQuery/response_0_<id>.json` (idempotent overwrite), and
 ids that already have a response on disk are skipped. Re-running therefore never
