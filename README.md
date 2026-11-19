@@ -12,7 +12,8 @@ Heat maps of the collected listings are rendered by the `analytics` module. Some
 cities resolve to a single Facebook coordinate and create misleadingly dense cells;
 see [docs/location_geocoding_outliers.md](docs/location_geocoding_outliers.md).
 Only the keyless Esri basemap is built in; see
-[docs/heatmap_basemaps.md](docs/heatmap_basemaps.md).
+[docs/heatmap_basemaps.md](docs/heatmap_basemaps.md). Sample Marketplace queries
+live in [docs/search_queries.md](docs/search_queries.md).
 
 ## Quick start
 
@@ -38,7 +39,8 @@ just serve          # browse at http://127.0.0.1:8090/_/
   `fme-1ke.1` and the durable PocketBase upgrade in `fme-1ke.6`.
 - **just** — https://github.com/casey/just#installation
 - **Google Chrome**, signed into `facebook.com` at least once
-- `rsync`; `sqlite3` is optional (used to verify the session)
+- `rsync`; `sqlite3` is optional (used to verify the session); `7z` is optional
+  (only needed for `just backup`)
 - First run downloads the Playwright driver + Chromium (~200–300 MB) into
   `~/.cache/ms-playwright-go`
 
@@ -97,9 +99,13 @@ you to log in first. Without a profile it also accepts `FME_USERNAME`/`FME_PASSW
 | `just doctor` | Diagnose a partial/broken setup (read-only) |
 | `just search "macbook m1"` | Collect listings for a keyword into `data/__Details` |
 | `just pull-description` | Fill missing `Description` fields via the PDP request |
+| `just get-details` | Visit each known listing to fetch its details |
 | `just process-data` | Re-extract listings from captured responses (no browser) |
+| `just fill-empty` | Backfill missing URLs on existing detail files |
 | `just description-stats` | Report how many `data/__Details` listings have no description |
 | `just dedupe-pdp` | Remove duplicate PDP responses (keeps newest per id) |
+| `just heatmap` | Build the GeoJSON/HTML heat map (`just heatmap-maps` lists basemaps) |
+| `just heatmap-serve` | Build the heat map and serve it on http://127.0.0.1:8799/ |
 | `just daemon` | Run the unattended scheduler in the foreground |
 | `just status` | Show the scheduler's last cycle, next run, and backoff |
 | `just archive` | Archive/prune processed search responses |
@@ -108,11 +114,13 @@ you to log in first. Without a profile it also accepts `FME_USERNAME`/`FME_PASSW
 | `just serve` | PocketBase admin/web UI on http://127.0.0.1:8090/_/ |
 | `just save` | Import `data/__Details` into PocketBase (creates the DB if needed) |
 | `just sync` | Push `data/` to a remote host (merge; see below) |
-| `just build` / `just test` / `just lint` / `just vet` | Build and quality gates |
+| `just backup` | Archive `data/` with `7z` (optional tool) |
+| `just build` / `install` / `test` / `lint` / `vet` | Build, install, and quality gates |
 | `just ml-install` / `just ml-train` | Python price-model pipeline |
+| `just clean` | Remove the built binary |
 
-`just search` pauses on `waiting for input:` — press Enter to finish. The pause
-only happens when stdin is a terminal, so cron and CI runs never block.
+`just search` and `just get-details` pause on `waiting for input:` when stdin is
+a terminal, so you can inspect the page; piped/cron runs continue automatically.
 
 ## Running unattended
 

@@ -8,9 +8,9 @@ available from the search feed — it only comes from a separate Product Detail 
 This document lists the requirements to obtain it. The same requirements are also
 documented in code:
 
-- `src/product.go` — `ProductDetailsGet` (extraction + full requirements)
-- `src/pages.go` — `OpenFirstProduct` (why we must click a listing)
-- `src/context_manager.go` — `OnResponse` (where the response is intercepted)
+- `go/marketplace/extract/extract.go` — `ProductDetailsGet` (extraction + full requirements)
+- `go/browser/marketplace/pages.go` — `OpenFirstProduct` (why we must click a listing)
+- `go/capture/context_manager.go` — `OnResponse` (where the response is intercepted)
 
 ## Where it lives
 
@@ -20,7 +20,7 @@ In the PDP GraphQL response:
 data.viewer.marketplace_product_details_page.target.redacted_description.text
 ```
 
-Extracted in `ProductDetailsGet` (`src/product.go`) into `MarketplaceItemDetails.Description`.
+Extracted in `ProductDetailsGet` (`go/marketplace/extract/extract.go`) into `MarketplaceItemDetails.Description`.
 
 ## Requirements
 
@@ -37,7 +37,7 @@ Extracted in `ProductDetailsGet` (`src/product.go`) into `MarketplaceItemDetails
    `Pages.OpenFirstProduct` clicks the first listing link.
 
 3. **The response must be intercepted.**
-   `ContextEventHandlers.OnResponse` (`src/context_manager.go`) listens for requests
+   `ContextEventHandlers.OnResponse` (`go/capture/context_manager.go`) listens for requests
    to `https://www.facebook.com/api/graphql/` whose friendly name
    (`fb_api_req_friendly_name` in the request post-data) is not in the skip set, and
    writes the decoded body to:
