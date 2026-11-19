@@ -291,7 +291,7 @@ func orderFiles(filePaths []string, sortIt bool) {
 	}
 
 	// Random order spreads the load when a run is stopped part-way.
-	rand.Shuffle(len(filePaths), func(i, j int) { //nolint:gosec // load spreading only; randomness is not security-sensitive.
+	rand.Shuffle(len(filePaths), func(i, j int) {
 		filePaths[i], filePaths[j] = filePaths[j], filePaths[i]
 	})
 }
