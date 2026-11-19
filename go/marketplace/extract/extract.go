@@ -314,7 +314,7 @@ func searchListingFromEdge(edge any) (model.MarketplaceItemDetails, bool) {
 		ID:                       productID,
 		URL:                      model.ProductIDToLink(productID),
 		Title:                    jsonutil.GetKey(listing, "marketplace_listing_title"),
-		CreationTime:             jsonutil.GetKey(listing, "if_gk_just_listed_tag_on_search_feed.creation_time"),
+		CreationTime:             searchCreationTime(listing),
 		PriceAmount:              jsonutil.GetKey(listing, "listing_price.amount"),
 		LocationLatitud:          location.LocationLatitud,
 		LocationLongitude:        location.LocationLongitude,
@@ -331,6 +331,17 @@ func searchListingFromEdge(edge any) (model.MarketplaceItemDetails, bool) {
 		IsPending:                jsonutil.GetKey(listing, "is_pending"),
 		IsSold:                   jsonutil.GetKey(listing, "is_sold"),
 	}, true
+}
+
+// searchCreationTime returns a listing's creation time from a search feed.
+// node.listing.creation_time is present on ordinary results, while the
+// just-listed tag only appears on a small subset, so prefer the former and keep
+// the tag as a fallback.
+func searchCreationTime(listing any) any {
+	if creationTime := jsonutil.GetKey(listing, "creation_time"); creationTime != nil {
+		return creationTime
+	}
+	return jsonutil.GetKey(listing, "if_gk_just_listed_tag_on_search_feed.creation_time")
 }
 
 // ProductFromDataValid reports whether the payload is an entity-data response

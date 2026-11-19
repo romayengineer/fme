@@ -162,6 +162,74 @@ func TestProductsFromSearchGetSkipsInvalidIDs(t *testing.T) {
 	}
 }
 
+type searchCreationCase struct {
+	name         string
+	listing      map[string]any
+	wantCreation any
+}
+
+func searchCreationCases() []searchCreationCase {
+	justListed := map[string]any{"creation_time": float64(1791836697)}
+	return []searchCreationCase{
+		{
+			name:         "listing creation time",
+			listing:      map[string]any{"id": "listing-id", "creation_time": float64(1791836697)},
+			wantCreation: float64(1791836697),
+		},
+		{
+			name: "listing creation time wins over the just-listed tag",
+			listing: map[string]any{
+				"id":                                   "listing-id",
+				"creation_time":                        float64(1791836697),
+				"if_gk_just_listed_tag_on_search_feed": map[string]any{"creation_time": float64(1)},
+			},
+			wantCreation: float64(1791836697),
+		},
+		{
+			name: "just-listed tag fallback",
+			listing: map[string]any{
+				"id":                                   "listing-id",
+				"if_gk_just_listed_tag_on_search_feed": justListed,
+			},
+			wantCreation: float64(1791836697),
+		},
+		{
+			name:         "absent creation time stays nil",
+			listing:      map[string]any{"id": "listing-id"},
+			wantCreation: nil,
+		},
+	}
+}
+
+func searchPayload(listing map[string]any) map[string]any {
+	return map[string]any{
+		"data": map[string]any{
+			"marketplace_search": map[string]any{
+				"feed_units": map[string]any{
+					"edges": []any{map[string]any{"node": map[string]any{"listing": listing}}},
+				},
+			},
+		},
+	}
+}
+
+func TestProductsFromSearchGetUsesListingCreationTime(t *testing.T) {
+	for _, tt := range searchCreationCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			products, err := ProductsFromSearchGet(searchPayload(tt.listing))
+			if err != nil {
+				t.Fatalf("ProductsFromSearchGet returned error: %v", err)
+			}
+			if len(products) != 1 {
+				t.Fatalf("got %d products, want 1", len(products))
+			}
+			if products[0].CreationTime != tt.wantCreation {
+				t.Errorf("CreationTime = %v, want %v", products[0].CreationTime, tt.wantCreation)
+			}
+		})
+	}
+}
+
 func TestExtractAllIgnoresInvalidIDsWithoutPanicking(t *testing.T) {
 	data := map[string]any{
 		"data": map[string]any{
