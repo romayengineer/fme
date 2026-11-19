@@ -251,19 +251,23 @@ func fillCredentials(page driver.PageWrapperInterface, creds UserCredentials) er
 	return nil
 }
 
-// submitLogin clicks the login button.
+// loginButtonSelectors are tried in order. Specific form controls come first;
+// the text selectors are a locale-aware fallback for Facebook's login page.
+var loginButtonSelectors = []string{
+	"button[name=login]",
+	"[data-testid=royal_login_button]",
+	"span:has-text('Log in')",
+	"span:has-text('Iniciar sesión')",
+}
+
+// submitLogin clicks the first login button the page exposes.
 func submitLogin(page driver.PageWrapperInterface) error {
-	loginButtons, err := page.Locator("span:has-text('Log in')").All()
-	if err != nil {
-		return fmt.Errorf("find login buttons: %w", err)
+	for _, selector := range loginButtonSelectors {
+		if err := page.Locator(selector).Nth(0).Click(); err == nil {
+			return nil
+		}
 	}
-	if len(loginButtons) != 4 {
-		return fmt.Errorf("log in button must be 4, found %d", len(loginButtons))
-	}
-	if err := page.Locator("span:has-text('Log in')").Nth(1).Click(); err != nil {
-		return fmt.Errorf("click Log In button: %w", err)
-	}
-	return nil
+	return errors.New("could not find the login button")
 }
 
 // waitForLoggedIn waits for Facebook to reach the home page after login.
