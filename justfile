@@ -181,4 +181,4 @@ ml-train:
 
 # Remove build artifacts
 clean:
-    rm -f {{binary}}
+    rm -f {{binary}} go/cmd/fme/{{binary}}

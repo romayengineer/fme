@@ -119,8 +119,7 @@ type Deps struct {
 	Logger   *slog.Logger
 }
 
-// App holds the dependencies for the use cases. Use cases are added in the
-// following Phase 1 tickets.
+// App holds the dependencies for the use cases.
 type App struct {
 	Deps
 }

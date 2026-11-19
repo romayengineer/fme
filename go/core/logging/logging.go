@@ -9,17 +9,11 @@ import (
 	"log/slog"
 )
 
-// Severity levels. LD0-LD3 are debug (most to least verbose), LI0-LI3 are
-// informational, LW0 is warning, and LE0 is error.
+// Severity levels. LD0 is debug, LI0 is informational, LW0 is warning, and
+// LE0 is error.
 const (
 	LD0 slog.Level = -4
-	LD1 slog.Level = -3
-	LD2 slog.Level = -2
-	LD3 slog.Level = -1
 	LI0 slog.Level = 0
-	LI1 slog.Level = 1
-	LI2 slog.Level = 2
-	LI3 slog.Level = 3
 	LW0 slog.Level = 4
 	LE0 slog.Level = 8
 )
@@ -35,39 +29,9 @@ func LogDebug0(funcName string, msg string, args ...any) {
 	Log(LD0, funcName, msg, args...)
 }
 
-// LogDebug1 logs a debug message at level 1.
-func LogDebug1(funcName string, msg string, args ...any) {
-	Log(LD1, funcName, msg, args...)
-}
-
-// LogDebug2 logs a debug message at level 2.
-func LogDebug2(funcName string, msg string, args ...any) {
-	Log(LD2, funcName, msg, args...)
-}
-
-// LogDebug3 logs a debug message at the least verbose debug level.
-func LogDebug3(funcName string, msg string, args ...any) {
-	Log(LD3, funcName, msg, args...)
-}
-
 // LogInfo0 logs an informational message at level 0.
 func LogInfo0(funcName string, msg string, args ...any) {
 	Log(LI0, funcName, msg, args...)
-}
-
-// LogInfo1 logs an informational message at level 1.
-func LogInfo1(funcName string, msg string, args ...any) {
-	Log(LI1, funcName, msg, args...)
-}
-
-// LogInfo2 logs an informational message at level 2.
-func LogInfo2(funcName string, msg string, args ...any) {
-	Log(LI2, funcName, msg, args...)
-}
-
-// LogInfo3 logs an informational message at level 3.
-func LogInfo3(funcName string, msg string, args ...any) {
-	Log(LI3, funcName, msg, args...)
 }
 
 // LogWarn0 logs a warning message.
