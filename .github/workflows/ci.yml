@@ -18,26 +18,33 @@ env:
   GO_VERSION: "1.25.14"
   GOTOOLCHAIN: "go1.25.14"
   GOLANGCI_LINT_VERSION: v2.12.2
-  MODULES: >-
-    go/analytics go/core go/marketplace go/browser
-    go/store go/capture go/app go/cmd/fme
 
 jobs:
+  # One source of truth for the module list: go.work, via scripts/modules.sh.
+  modules:
+    name: modules
+    runs-on: ubuntu-latest
+    outputs:
+      list: ${{ steps.list.outputs.list }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: go.work.sum
+      - name: List workspace modules
+        id: list
+        run: |
+          echo "list=$(./scripts/modules.sh | jq -R -s -c 'split("\n") | map(select(length > 0))')" >> "$GITHUB_OUTPUT"
+
   lint:
     name: lint (${{ matrix.module }})
+    needs: modules
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        module:
-          - go/analytics
-          - go/core
-          - go/marketplace
-          - go/browser
-          - go/store
-          - go/capture
-          - go/app
-          - go/cmd/fme
+        module: ${{ fromJson(needs.modules.outputs.list) }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -52,6 +59,7 @@ jobs:
 
   format:
     name: format
+    needs: modules
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -65,26 +73,19 @@ jobs:
           install-only: true
       - name: Check formatting
         run: |
-          for m in $MODULES; do
+          for m in $(./scripts/modules.sh); do
             echo "== $m"
             (cd "$m" && golangci-lint fmt --diff ./...)
           done
 
   test:
     name: test (${{ matrix.module }})
+    needs: modules
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        module:
-          - go/analytics
-          - go/core
-          - go/marketplace
-          - go/browser
-          - go/store
-          - go/capture
-          - go/app
-          - go/cmd/fme
+        module: ${{ fromJson(needs.modules.outputs.list) }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

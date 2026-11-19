@@ -9,7 +9,6 @@ export GOTOOLCHAIN := "go1.25.14"
 
 binary := "fme"
 cmd := "go/cmd/fme"
-modules := "go/analytics go/core go/marketplace go/browser go/store go/capture go/app go/cmd/fme"
 
 # List available recipes
 default:
@@ -36,34 +35,34 @@ doctor:
 
 # Download and tidy dependencies for every module
 tidy:
-    @for m in {{modules}}; do echo "tidy $m"; (cd "$m" && go mod tidy); done
+    @for m in $(./scripts/modules.sh); do echo "tidy $m"; (cd "$m" && go mod tidy); done
 
 # Format Go source in every module (gofumpt + goimports via golangci-lint)
 fmt:
-    @for m in {{modules}}; do (cd "$m" && golangci-lint fmt ./...); done
+    @for m in $(./scripts/modules.sh); do (cd "$m" && golangci-lint fmt ./...); done
 
 # Fail if any Go source would be reformatted
 fmt-check:
-    @for m in {{modules}}; do (cd "$m" && golangci-lint fmt --diff ./...); done
+    @for m in $(./scripts/modules.sh); do (cd "$m" && golangci-lint fmt --diff ./...); done
 
 # Run the Go vet static analyzer in every module
 vet:
-    @for m in {{modules}}; do (cd "$m" && go vet ./...); done
+    @for m in $(./scripts/modules.sh); do (cd "$m" && go vet ./...); done
 
 # Run golangci-lint in every module
 lint:
-    @for m in {{modules}}; do (cd "$m" && golangci-lint run ./...); done
+    @for m in $(./scripts/modules.sh); do (cd "$m" && golangci-lint run ./...); done
 
 # Run every quality gate: formatting, vet, lint, and the race-enabled tests
 check: fmt-check vet lint test
 
 # Run the test suite in every module with the race detector
 test:
-    @for m in {{modules}}; do (cd "$m" && go test -race ./...); done
+    @for m in $(./scripts/modules.sh); do (cd "$m" && go test -race ./...); done
 
 # Run the test suite with coverage in every module
 cover:
-    @for m in {{modules}}; do (cd "$m" && go test -cover ./...); done
+    @for m in $(./scripts/modules.sh); do (cd "$m" && go test -cover ./...); done
 
 # Build the scraper binary
 build: tidy

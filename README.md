@@ -211,6 +211,12 @@ cmd/fme -> app -> {browser, capture, store, marketplace, analytics} -> core
 - `store` provides file and PocketBase implementations; it does not decide when
   a use case runs.
 
+The eight modules are intentional: they keep each layer's dependency graph and
+`replace` directives explicit. `scripts/modules.sh` reads the list from
+`go.work`, and both `just` and CI consume it, so adding or removing a module
+means editing `go.work` (plus the new module's `go.mod`), not several hardcoded
+lists. CI runs lint/test once per module.
+
 To add a CLI action:
 
 1. Add an options struct and a use-case method in `go/app`.
