@@ -144,3 +144,26 @@ func TestFetchPDPRequiresSink(t *testing.T) {
 		t.Fatal("FetchPDP returned no error for a nil sink")
 	}
 }
+
+func TestRedactedHeaderValue(t *testing.T) {
+	secret := "session-secret"
+	tests := map[string]string{
+		"Cookie":              "<redacted>",
+		"COOKIE":              "<redacted>",
+		"Set-Cookie":          "<redacted>",
+		"Authorization":       "<redacted>",
+		"Proxy-Authorization": "<redacted>",
+		"X-CSRF-Token":        "<redacted>",
+		"X-FB-LSD":            "<redacted>",
+		"Content-Type":        secret,
+		"X-FB-Friendly-Name":  secret,
+	}
+
+	for name, want := range tests {
+		t.Run(name, func(t *testing.T) {
+			if got := redactedHeaderValue(name, secret); got != want {
+				t.Errorf("redactedHeaderValue(%q) = %q, want %q", name, got, want)
+			}
+		})
+	}
+}

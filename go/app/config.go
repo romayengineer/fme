@@ -71,7 +71,7 @@ func printConfigSource(config *Config) {
 		fmt.Printf("Using browser profile: %s\n", config.UserDataDir)
 		return
 	}
-	fmt.Printf("Loaded credentials - Username: %s\n", config.UserCredentials.Username)
+	fmt.Println("Loaded credentials from FME_USERNAME/FME_PASSWORD")
 }
 
 // headlessFromEnv reads FME_HEADLESS. An unset or invalid value yields nil so

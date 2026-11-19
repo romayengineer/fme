@@ -2,6 +2,8 @@ module github.com/romayengineer/fme/go/capture
 
 go 1.25.0
 
+toolchain go1.25.14
+
 require (
 	github.com/mxschmitt/playwright-go v0.6201.1
 	github.com/romayengineer/fme/go/browser v0.0.0

@@ -2,6 +2,8 @@ module github.com/romayengineer/fme/go/cmd/fme
 
 go 1.25.0
 
+toolchain go1.25.14
+
 require (
 	github.com/romayengineer/fme/go/analytics v0.0.0
 	github.com/romayengineer/fme/go/app v0.0.0
@@ -56,7 +58,6 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-sqlite3 v1.14.52 // indirect
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d // indirect
-	github.com/mozillazg/go-unidecode v0.2.0 // indirect
 	github.com/mxschmitt/playwright-go v0.6201.1 // indirect
 	github.com/pocketbase/dbx v1.10.1 // indirect
 	github.com/pocketbase/pocketbase v0.21.3 // indirect

@@ -53,9 +53,7 @@ func RunRequestWithData(ctx driver.ContextWrapperInterface, pwRequest playwright
 
 	logging.LogDebug0("RunRequest", "request", "url", url, "method", method)
 	logging.LogDebug0("RunRequest", "request headers", "count", len(headers))
-	for h, v := range headers {
-		logging.LogDebug0("RunRequest", "header", "key", h, "value", v)
-	}
+	logRedactedHeaders("header", headers)
 
 	response, err := ctx.Fetch(url,
 		playwright.APIRequestContextFetchOptions{
@@ -70,11 +68,36 @@ func RunRequestWithData(ctx driver.ContextWrapperInterface, pwRequest playwright
 
 	responseHeaders := response.Headers()
 	logging.LogDebug0("RunRequest", "response headers", "count", len(responseHeaders))
-	for h, v := range responseHeaders {
-		logging.LogDebug0("RunRequest", "response header", "key", h, "value", v)
-	}
+	logRedactedHeaders("response header", responseHeaders)
 
 	return response, nil
+}
+
+// sensitiveHeaderNames lists headers whose values must never reach the logs.
+var sensitiveHeaderNames = map[string]struct{}{
+	"authorization":       {},
+	"cookie":              {},
+	"proxy-authorization": {},
+	"set-cookie":          {},
+	"x-csrf-token":        {},
+	"x-fb-lsd":            {},
+}
+
+// redactedHeaderValue returns placeholder for sensitive headers and the
+// original value otherwise. Matching is case-insensitive because HTTP header
+// names are.
+func redactedHeaderValue(name, value string) string {
+	if _, sensitive := sensitiveHeaderNames[strings.ToLower(name)]; sensitive {
+		return "<redacted>"
+	}
+	return value
+}
+
+// logRedactedHeaders logs each header without exposing session credentials.
+func logRedactedHeaders(kind string, headers map[string]string) {
+	for name, value := range headers {
+		logging.LogDebug0("RunRequest", kind, "key", name, "value", redactedHeaderValue(name, value))
+	}
 }
 
 // RunRequest replays request with its captured post data.

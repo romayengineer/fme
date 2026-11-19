@@ -1,6 +1,12 @@
 set shell := ["bash", "-cu"]
 set positional-arguments := true
 
+# PocketBase v0.21.3 crashes under Go 1.27's encoding/json. A `toolchain`
+# directive only raises the minimum, it cannot cap a newer local Go, so every
+# recipe forces the pinned release explicitly (fme-1ke.1). Direct `go`
+# commands need the same env var; see README "Requirements".
+export GOTOOLCHAIN := "go1.25.14"
+
 binary := "fme"
 cmd := "go/cmd/fme"
 modules := "go/analytics go/core go/marketplace go/browser go/store go/capture go/app go/cmd/fme"

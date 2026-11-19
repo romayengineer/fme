@@ -187,7 +187,6 @@ linters:
             - "$gostd"
             - "github.com/romayengineer/fme/go/core"
             - "github.com/romayengineer/fme/go/marketplace/model"
-            - "github.com/mozillazg/go-unidecode"
             - "github.com/pocketbase"
             # Tests use testify assertions.
             - "github.com/stretchr/testify"

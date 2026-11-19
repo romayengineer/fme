@@ -73,7 +73,31 @@ func TestSaveProductUpdatesExistingRow(t *testing.T) {
 		Bind(map[string]any{"id": "123"}).
 		One(&got)
 	require.NoError(t, err)
-	require.Equal(t, "second title", got.Title)
+	require.Equal(t, "Second Title", got.Title)
+}
+
+func TestSaveProductPreservesUnicodeText(t *testing.T) {
+	database := newTestDB(t)
+
+	product := model.MarketplaceItemDetails{
+		ID:          "unicode-1",
+		Title:       "MacBook Pro M1 — ¡Excelente! Café",
+		Description: "Añadido: ñandú, 日本語, emoji 🚀",
+	}
+	_, err := database.SaveProduct(product)
+	require.NoError(t, err)
+
+	var got struct {
+		Title       string `db:"title"`
+		Description string `db:"description"`
+	}
+	err = database.app.Dao().DB().
+		NewQuery("SELECT title, description FROM products WHERE facebook_id = {:id}").
+		Bind(map[string]any{"id": product.ID}).
+		One(&got)
+	require.NoError(t, err)
+	require.Equal(t, product.Title, got.Title)
+	require.Equal(t, product.Description, got.Description)
 }
 
 func TestSaveProductPropagatesDatabaseErrors(t *testing.T) {

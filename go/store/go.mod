@@ -2,9 +2,10 @@ module github.com/romayengineer/fme/go/store
 
 go 1.25.0
 
+toolchain go1.25.14
+
 require (
 	github.com/google/uuid v1.6.0
-	github.com/mozillazg/go-unidecode v0.2.0
 	github.com/pocketbase/dbx v1.10.1
 	github.com/pocketbase/pocketbase v0.21.3
 	github.com/romayengineer/fme/go/core v0.0.0

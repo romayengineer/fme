@@ -5,9 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 
-	"github.com/mozillazg/go-unidecode"
 	"github.com/pocketbase/pocketbase/models"
 
 	"github.com/romayengineer/fme/go/core/logging"
@@ -64,8 +62,8 @@ func SetProductFields(record *models.Record, product model.MarketplaceItemDetail
 // setProductRecord writes the listing fields onto a PocketBase record.
 func setProductRecord(record *models.Record, product model.MarketplaceItemDetails, nums productNumbers) {
 	record.Set("facebook_id_long", toString(product.IDLong))
-	record.Set("title", toStringClean(product.Title))
-	record.Set("description", toStringClean(product.Description))
+	record.Set("title", toString(product.Title))
+	record.Set("description", toString(product.Description))
 	record.Set("category", toString(product.Category))
 	record.Set("url", toString(product.URL))
 	record.Set("price_amount", nums.priceAmount)
@@ -143,8 +141,8 @@ func productBindValues(product model.MarketplaceItemDetails, facebookID string, 
 	return map[string]any{
 		"facebook_id":         facebookID,
 		"facebook_id_long":    toString(product.IDLong),
-		"title":               toStringClean(product.Title),
-		"description":         toStringClean(product.Description),
+		"title":               toString(product.Title),
+		"description":         toString(product.Description),
 		"category":            toString(product.Category),
 		"url":                 toString(product.URL),
 		"price_amount":        nums.priceAmount,
@@ -248,18 +246,6 @@ func toString(v any) string {
 		return ""
 	}
 	return fmt.Sprintf("%v", v)
-}
-
-func toStringClean(v any) string {
-	if v == nil {
-		return ""
-	}
-	value := fmt.Sprintf("%v", v)
-	// Convert UTF-8 to ASCII using unidecode
-	value = unidecode.Unidecode(value)
-	// Convert to lowercase
-	value = strings.ToLower(value)
-	return value
 }
 
 // toFloat converts a JSON scalar to float64, parsing numeric strings.

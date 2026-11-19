@@ -6,6 +6,9 @@
 # Usage: just doctor
 set -uo pipefail
 
+# PocketBase v0.21.3 crashes under Go 1.27; force the pinned toolchain.
+export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.25.14}"
+
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 cd "$ROOT_DIR"
@@ -25,8 +28,15 @@ printf '\033[1mfacebook marketplace extractor — doctor\033[0m\n'
 
 section "Toolchain"
 
+expected_go="$(sed -n 's/^toolchain go//p' "$ROOT_DIR/go.work" 2>/dev/null | head -1)"
 if command -v go >/dev/null 2>&1; then
-    pass "go $(go env GOVERSION | sed 's/^go//')"
+    go_version="$(go env GOVERSION | sed 's/^go//')"
+    if [ -n "$expected_go" ] && [ "$go_version" != "$expected_go" ]; then
+        warn "go $go_version selected; the repo pins $expected_go (PocketBase v0.21.3 needs Go 1.25)"
+        fix "export GOTOOLCHAIN=go$expected_go, or run go commands through just"
+    else
+        pass "go $go_version"
+    fi
 else
     fail "go not found"
     fix "install Go >= 1.25 from https://go.dev/dl/"
@@ -54,8 +64,30 @@ section "Configuration (.env)"
 env_file="$ROOT_DIR/.env"
 user_data_dir=""
 
+env_mode() {
+    stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1" 2>/dev/null || printf '?'
+}
+
 if [ -f "$env_file" ]; then
     pass ".env exists"
+    env_perms="$(env_mode "$env_file")"
+    case "$env_perms" in
+        600|400) pass ".env permissions: $env_perms" ;;
+        *)
+            warn ".env is readable by other users (mode $env_perms); it may contain FME_PASSWORD"
+            fix "chmod 600 $env_file"
+            ;;
+    esac
+    if [ -f "$env_file.bak" ]; then
+        backup_perms="$(env_mode "$env_file.bak")"
+        case "$backup_perms" in
+            600|400) ;;
+            *)
+                warn ".env.bak is readable by other users (mode $backup_perms)"
+                fix "chmod 600 $env_file.bak"
+                ;;
+        esac
+    fi
     # shellcheck disable=SC1090
     user_data_dir="$(sed -n 's/^FME_USER_DATA_DIR=//p' "$env_file" | tail -1)"
     profile_directory="$(sed -n 's/^FME_PROFILE_DIRECTORY=//p' "$env_file" | tail -1)"

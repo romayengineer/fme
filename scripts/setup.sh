@@ -14,6 +14,9 @@
 #   FME_PASSWORD       is skipped and the tool logs in with credentials instead
 set -euo pipefail
 
+# PocketBase v0.21.3 crashes under Go 1.27; force the pinned toolchain.
+export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.25.14}"
+
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
@@ -58,6 +61,27 @@ info() { printf '    %s\n' "$*"; }
 ok() { printf '    \033[32m✓\033[0m %s\n' "$*"; }
 warn() { printf '    \033[33m!\033[0m %s\n' "$*"; }
 die() { printf '\n\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
+
+# env_mode prints a file's permission bits (Linux stat -c, macOS stat -f).
+env_mode() {
+    stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1" 2>/dev/null || printf '?'
+}
+
+# secure_env_file restricts an .env-style file to the current user. Credentials
+# may live in it, so group/world-readable modes are corrected in place.
+secure_env_file() {
+    local file="$1" mode
+    [ -f "$file" ] || return 0
+    mode="$(env_mode "$file")"
+    if [ "$mode" = "600" ] || [ "$mode" = "400" ]; then
+        return 0
+    fi
+    if chmod 600 "$file" 2>/dev/null; then
+        ok "restricted $file to mode 600 (was $mode)"
+    else
+        warn "could not restrict permissions on $file; run: chmod 600 $file"
+    fi
+}
 
 # --- platform defaults -------------------------------------------------------
 
@@ -271,6 +295,10 @@ EOF
     fi
     ok "wrote $env_file"
 fi
+
+# Fix permissions on an existing or freshly written .env, including the backup.
+secure_env_file "$env_file"
+secure_env_file "$env_file.bak"
 
 # --- 4. dependencies + build -------------------------------------------------
 

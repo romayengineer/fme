@@ -30,7 +30,12 @@ just serve          # browse at http://127.0.0.1:8090/_/
 
 ## Requirements
 
-- **Go >= 1.25** — https://go.dev/dl/
+- **Go 1.25.14** — https://go.dev/dl/. PocketBase v0.21.3 crashes under newer
+  Go releases (Go 1.27's `encoding/json`), so the `just` recipes, `setup.sh`,
+  and CI force `GOTOOLCHAIN=go1.25.14`. A `toolchain` directive in `go.work`
+  and each `go.mod` raises the minimum but cannot cap a newer local Go, so run
+  Go commands through `just` or export the same variable yourself. See
+  `fme-1ke.1` and the durable PocketBase upgrade in `fme-1ke.6`.
 - **just** — https://github.com/casey/just#installation
 - **Google Chrome**, signed into `facebook.com` at least once
 - `rsync`; `sqlite3` is optional (used to verify the session)

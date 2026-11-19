@@ -6,6 +6,15 @@ This project uses **bd** (beads) for issue tracking. Run `bd prime` for full wor
 
 Commit working increments while making progress — after each completed Beads ticket or coherent milestone. Keep commits focused and scoped to the ticket. Do not push or run Dolt remote sync unless explicitly asked.
 
+### Toolchain
+
+Go is pinned to **1.25.14**. PocketBase v0.21.3 crashes under Go 1.27's
+`encoding/json`, so the `justfile`, `scripts/setup.sh`, `scripts/doctor.sh`,
+and CI force `GOTOOLCHAIN=go1.25.14`. A `toolchain` directive in `go.work` and
+each `go.mod` only raises the minimum; it cannot cap a newer local Go. Run Go
+commands through `just` or export `GOTOOLCHAIN=go1.25.14` yourself. Do not bump
+the toolchain without upgrading PocketBase (`fme-1ke.6`).
+
 > **Architecture in one line:** Issues live in a local Dolt database
 > (`.beads/dolt/`); cross-machine sync uses `bd dolt push/pull` (a
 > git-compatible protocol), stored under `refs/dolt/data` on your git
