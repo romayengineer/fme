@@ -233,20 +233,54 @@ func GetFilePaths(prefix string, sortIt bool) ([]string, error) {
 }
 
 // walkDataFiles collects the non-archived data files with the given prefix.
+// Detail records live in one directory, so that scan stays there instead of
+// walking every captured response. Response scans skip the other data trees.
 func walkDataFiles(prefix string) ([]string, error) {
+	root := dataWalkRoot(prefix)
 	filePaths := []string{}
 	visit := func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		filePaths = appendDataFile(filePaths, path, d, prefix)
+		var skip bool
+		filePaths, skip = collectDataFile(filePaths, path, d, root, prefix)
+		if skip {
+			return filepath.SkipDir
+		}
 		return nil
 	}
 
-	if err := filepath.WalkDir(DataDir, visit); err != nil {
-		return nil, fmt.Errorf("walk %s: %w", DataDir, err)
+	if err := filepath.WalkDir(root, visit); err != nil {
+		return nil, fmt.Errorf("walk %s: %w", root, err)
 	}
 	return filePaths, nil
+}
+
+// dataWalkRoot returns the narrowest directory that can contain prefix files.
+func dataWalkRoot(prefix string) string {
+	if prefix == paths.DetailPrefix {
+		return paths.DetailDir()
+	}
+	return DataDir
+}
+
+// collectDataFile appends a matching file and reports whether to skip the
+// current directory.
+func collectDataFile(filePaths []string, path string, d fs.DirEntry, root, prefix string) ([]string, bool) {
+	if d.IsDir() && path != root && skipDataDir(d.Name()) {
+		return filePaths, true
+	}
+	return appendDataFile(filePaths, path, d, prefix), false
+}
+
+// skipDataDir reports whether a data subdirectory cannot contain responses.
+func skipDataDir(name string) bool {
+	switch name {
+	case paths.DetailDirName, "analytics", paths.DebugDirName:
+		return true
+	default:
+		return false
+	}
 }
 
 // appendDataFile appends path when it is a matching, non-archived data file.
@@ -416,11 +450,23 @@ func pdpFilesByID(dir string) (map[string][]string, error) {
 
 // pdpEntryID returns the product id stored in a PDP response file.
 func pdpEntryID(dir string, entry os.DirEntry) (string, bool) {
-	if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+	if !isJSONEntry(entry) {
 		return "", false
 	}
+	if id, ok := paths.ResponseIDFromFileName(entry.Name()); ok {
+		return id, true
+	}
+	return pdpPayloadID(filepath.Join(dir, entry.Name()))
+}
 
-	jsonData, err := readJSONObject(filepath.Join(dir, entry.Name()))
+// isJSONEntry reports whether entry is a regular JSON file.
+func isJSONEntry(entry os.DirEntry) bool {
+	return !entry.IsDir() && strings.HasSuffix(entry.Name(), ".json")
+}
+
+// pdpPayloadID reads the target id from a legacy timestamped PDP response.
+func pdpPayloadID(path string) (string, bool) {
+	jsonData, err := readJSONObject(path)
 	if err != nil {
 		return "", false
 	}

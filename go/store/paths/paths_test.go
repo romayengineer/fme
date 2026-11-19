@@ -31,6 +31,30 @@ func TestResponsePaths(t *testing.T) {
 	}
 }
 
+func TestResponseIDFromFileName(t *testing.T) {
+	tests := []struct {
+		name   string
+		wantID string
+		wantOK bool
+	}{
+		{name: "response_0_999.json", wantID: "999", wantOK: true},
+		{name: filepath.Join("data", "Query", "response_0_123456789.json"), wantID: "123456789", wantOK: true},
+		{name: "response_1700000000_000042.json"},
+		{name: "detail_123.json"},
+		{name: "response_0_.json"},
+		{name: "response_0_999.txt"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			id, ok := ResponseIDFromFileName(test.name)
+			if id != test.wantID || ok != test.wantOK {
+				t.Errorf("ResponseIDFromFileName(%q) = %q,%v want %q,%v", test.name, id, ok, test.wantID, test.wantOK)
+			}
+		})
+	}
+}
+
 func TestParseTimestamp(t *testing.T) {
 	timestamp, err := ParseTimestamp(filepath.Join("data", "Query", "response_1700000000_000042.json"))
 	if err != nil {

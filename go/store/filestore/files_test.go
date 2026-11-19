@@ -1,12 +1,14 @@
 package filestore
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
 
 	"github.com/romayengineer/fme/go/marketplace/model"
+	"github.com/romayengineer/fme/go/store/paths"
 )
 
 // pdpPayload builds a Marketplace PDP response for one listing.
@@ -152,6 +154,38 @@ func TestForEachDetailReturnsDataDirectoryErrors(t *testing.T) {
 	_, err := ForEachDetail(func(string, map[string]any) bool { return true }, false)
 	if err == nil {
 		t.Fatal("ForEachDetail returned nil error for a missing data directory")
+	}
+}
+
+func TestLoadPDPProductIDsUsesFilenameThenPayload(t *testing.T) {
+	t.Chdir(t.TempDir())
+	dir := paths.PDPDir()
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatalf("create PDP dir: %v", err)
+	}
+
+	// Deterministic files are id-keyed, so an unreadable payload still counts.
+	writeTestFile(t, filepath.Join(dir, "response_0_777.json"), "not json")
+	// Legacy timestamped files still fall back to parsing the payload.
+	legacy, err := json.Marshal(pdpPayload("888", "legacy"))
+	if err != nil {
+		t.Fatalf("marshal legacy payload: %v", err)
+	}
+	writeTestFile(t, filepath.Join(dir, "response_1700000000_000042.json"), string(legacy))
+
+	ids := LoadPDPProductIDs()
+	for _, want := range []string{"777", "888"} {
+		if _, ok := ids[want]; !ok {
+			t.Errorf("LoadPDPProductIDs missing %q (got %v)", want, ids)
+		}
+	}
+}
+
+func writeTestFile(t *testing.T, path, content string) {
+	t.Helper()
+
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write %s: %v", path, err)
 	}
 }
 

@@ -87,6 +87,20 @@ func ResponseFileByID(friendlyName, prefix, id string) string {
 	return filepath.Join(DataDir, friendlyName, name)
 }
 
+// ResponseIDFromFileName returns the product id encoded in an id-keyed
+// response filename (response_0_<id>.json) and reports whether the name has
+// that shape. Legacy timestamped response files return false.
+func ResponseIDFromFileName(name string) (string, bool) {
+	base := filepath.Base(name)
+	prefix := ResponsePrefix + "_0_"
+	if !strings.HasPrefix(base, prefix) || !strings.HasSuffix(base, ".json") {
+		return "", false
+	}
+
+	id := strings.TrimSuffix(strings.TrimPrefix(base, prefix), ".json")
+	return id, id != ""
+}
+
 // ParseTimestamp reads the numeric timestamp embedded in a response filename.
 func ParseTimestamp(filePath string) (int64, error) {
 	parts := strings.SplitN(filepath.Base(filePath), "_", 3)
