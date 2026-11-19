@@ -149,6 +149,7 @@ func (d *fakeDetails) ArchiveSearchResponses(time.Time, time.Time) (int, int, er
 	d.archiveCall++
 	return d.archived, d.pruned, d.archiveErr
 }
+
 func (d *fakeDetails) DescriptionStats() (DescriptionStats, error) {
 	return d.stats, nil
 }
@@ -273,7 +274,8 @@ func TestSearchReturnsProcessError(t *testing.T) {
 	}
 }
 
-func TestSearchReturnsSessionError(t *testing.T) {	app := New(Deps{
+func TestSearchReturnsSessionError(t *testing.T) {
+	app := New(Deps{
 		Sessions: &fakeSessions{err: errors.New("login failed")},
 	})
 

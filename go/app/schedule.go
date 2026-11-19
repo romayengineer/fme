@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"time"
-
-	"github.com/romayengineer/fme/go/store/paths"
 )
 
 // Scheduler defaults. A cycle searches every term, then pulls every pending
@@ -43,11 +41,6 @@ type ScheduleOptions struct {
 	Sleep          func(ctx context.Context, d time.Duration) error
 }
 
-// ScheduleStatus loads the persisted scheduler state from the default path.
-func ScheduleStatus() (ScheduleState, error) {
-	return LoadScheduleState(paths.SchedulerStatePath())
-}
-
 // RunSchedule runs cycles until ctx is cancelled or MaxCycles is reached. A
 // runtime error (browser, login, storage) is logged and retried on the next
 // cycle instead of stopping the daemon; only invalid configuration or an
@@ -73,23 +66,13 @@ func (a *App) RunSchedule(ctx context.Context, opts ScheduleOptions) error {
 	return s.run(ctx)
 }
 
-// withScheduleDefaults fills unset options.
+// withScheduleDefaults fills unset options. The state and lock paths are
+// required: the composition root supplies them so app stays independent of the
+// on-disk layout.
 func withScheduleDefaults(opts ScheduleOptions) ScheduleOptions {
-	opts = withSchedulePaths(opts)
 	opts = withScheduleClock(opts)
 	if opts.Interval <= 0 {
 		opts.Interval = DefaultScheduleInterval
-	}
-	return opts
-}
-
-// withSchedulePaths fills the state and lock paths.
-func withSchedulePaths(opts ScheduleOptions) ScheduleOptions {
-	if opts.StatePath == "" {
-		opts.StatePath = paths.SchedulerStatePath()
-	}
-	if opts.LockPath == "" {
-		opts.LockPath = paths.SchedulerLockPath()
 	}
 	return opts
 }
@@ -115,6 +98,14 @@ func (a *App) validateSchedule(opts ScheduleOptions) error {
 	}
 	if len(opts.Terms) == 0 {
 		return errors.New("schedule: no search terms configured")
+	}
+	return validateSchedulePaths(opts)
+}
+
+// validateSchedulePaths requires the paths the composition root supplies.
+func validateSchedulePaths(opts ScheduleOptions) error {
+	if opts.StatePath == "" || opts.LockPath == "" {
+		return errors.New("schedule: state and lock paths are required")
 	}
 	return nil
 }

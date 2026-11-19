@@ -102,6 +102,12 @@ func registerFlags(flags *Flags) *optionalBool {
 	flag.IntVar(&flags.minRepeat, "min-repeat", 5, "Heat map: drop coordinates repeated >= N times within one city (action=heatmap; 0 disables)")
 	flag.BoolVar(&flags.retryUnavailable, "retry-unavailable", false, "pull_description: retry listings previously marked as no longer existing")
 	flag.Var(headless, "headless", "Launch Chromium without a window; default is headed when a display is available (also FME_HEADLESS)")
+	registerScheduleFlags(flags)
+	return headless
+}
+
+// registerScheduleFlags declares the unattended-scheduler and logging flags.
+func registerScheduleFlags(flags *Flags) {
 	flag.StringVar(&flags.termsFile, "terms", "search-terms.txt", "Search terms file, one query per line (action=schedule)")
 	flag.DurationVar(&flags.interval, "interval", app.DefaultScheduleInterval, "Pause between scheduler cycles (action=schedule)")
 	flag.DurationVar(&flags.perTermDelay, "per-term-delay", app.DefaultPerTermDelay, "Pause between consecutive searches (action=schedule; 0 disables)")
@@ -110,7 +116,6 @@ func registerFlags(flags *Flags) *optionalBool {
 	flag.DurationVar(&flags.keepArchived, "keep-archived", app.DefaultKeepArchived, "Age after which archived responses are deleted (action=schedule, archive_responses)")
 	flag.IntVar(&flags.scheduleDelayMs, "schedule-delay-ms", app.DefaultScheduleDelayMs, "Delay in milliseconds between description requests in a scheduler cycle (action=schedule)")
 	flag.StringVar(&flags.logFile, "log-file", "", "Append logs to this file in addition to stderr (all actions)")
-	return headless
 }
 
 // NewFlags parses the command-line flags, validates them, and configures logging.

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/romayengineer/fme/go/app"
+	"github.com/romayengineer/fme/go/store/paths"
 )
 
 // runSchedule runs the unattended scraper until the process is interrupted.
@@ -29,6 +30,8 @@ func runSchedule(a *app.App, flags Flags) error {
 		ScrollSeconds:  flags.scrollSeconds,
 		DelayMs:        flags.scheduleDelayMs,
 		ArchiveOptions: app.ArchiveOptions{OlderThan: flags.archiveAfter, KeepArchive: flags.keepArchived},
+		StatePath:      paths.SchedulerStatePath(),
+		LockPath:       paths.SchedulerLockPath(),
 		RefreshProfile: refreshProfile,
 	}
 	if flags.once {
@@ -40,7 +43,7 @@ func runSchedule(a *app.App, flags Flags) error {
 
 // runStatus prints the persisted scheduler state.
 func runStatus(_ *app.App, _ Flags) error {
-	state, err := app.ScheduleStatus()
+	state, err := app.LoadScheduleState(paths.SchedulerStatePath())
 	if err != nil {
 		return err
 	}

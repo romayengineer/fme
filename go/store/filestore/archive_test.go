@@ -18,7 +18,7 @@ func TestArchiveSearchResponsesMovesOnlyOldSearchFiles(t *testing.T) {
 
 	oldPath := writeTestResponse(t, friendlyDir, now.Add(-10*24*time.Hour))
 	recentPath := writeTestResponse(t, friendlyDir, now.Add(-1*time.Hour))
-	pdpPath := writeTestFile(t, paths.PDPDir(), "response_0_123.json")
+	pdpPath := writeTestArchiveFile(t, paths.PDPDir(), "response_0_123.json")
 
 	archived, pruned, err := ArchiveSearchResponses(now.Add(-7*24*time.Hour), now.Add(-30*24*time.Hour))
 	if err != nil {
@@ -53,8 +53,8 @@ func TestArchiveSearchResponsesIsIdempotent(t *testing.T) {
 func TestArchiveSearchResponsesPrunesOldArchives(t *testing.T) {
 	t.Chdir(t.TempDir())
 	now := time.Now()
-	oldArchive := writeTestFile(t, filepath.Join(paths.ArchivedDir(), testSearchQuery), "response_1_000001.json")
-	recentArchive := writeTestFile(t, filepath.Join(paths.ArchivedDir(), testSearchQuery), "response_2_000002.json")
+	oldArchive := writeTestArchiveFile(t, filepath.Join(paths.ArchivedDir(), testSearchQuery), "response_1_000001.json")
+	recentArchive := writeTestArchiveFile(t, filepath.Join(paths.ArchivedDir(), testSearchQuery), "response_2_000002.json")
 
 	if err := os.Chtimes(oldArchive, now.Add(-40*24*time.Hour), now.Add(-40*24*time.Hour)); err != nil {
 		t.Fatalf("set old archive mtime: %v", err)
@@ -84,11 +84,11 @@ func writeTestResponse(t *testing.T, dir string, at time.Time) string {
 	t.Helper()
 
 	name := filepath.Base(paths.ResponseFile(filepath.Base(dir), paths.ResponsePrefix, at.UnixNano(), 1))
-	return writeTestFile(t, dir, name)
+	return writeTestArchiveFile(t, dir, name)
 }
 
-// writeTestFile creates a JSON file and returns its path.
-func writeTestFile(t *testing.T, dir, name string) string {
+// writeTestArchiveFile creates a JSON file and returns its path.
+func writeTestArchiveFile(t *testing.T, dir, name string) string {
 	t.Helper()
 
 	if err := os.MkdirAll(dir, 0o750); err != nil {

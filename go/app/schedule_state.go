@@ -5,9 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
-
-	"github.com/romayengineer/fme/go/store/jsonstore"
 )
 
 // Rate-limit backoff bounds for the scheduler. A blocked account is retried
@@ -60,10 +59,42 @@ func LoadScheduleState(path string) (ScheduleState, error) {
 // SaveScheduleState writes the state atomically so a crash cannot leave a
 // partially written file behind.
 func SaveScheduleState(path string, state ScheduleState) error {
-	if err := jsonstore.WriteJSONFile(path, state, 0o600); err != nil {
+	body, err := json.Marshal(state)
+	if err != nil {
+		return fmt.Errorf("encode scheduler state %s: %w", path, err)
+	}
+
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".scheduler-state-*.json")
+	if err != nil {
+		return fmt.Errorf("create scheduler state %s: %w", path, err)
+	}
+	tmpPath := tmp.Name()
+	defer func() { _ = os.Remove(tmpPath) }()
+
+	if err := writeStateFile(tmp, body); err != nil {
 		return fmt.Errorf("write scheduler state %s: %w", path, err)
 	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("replace scheduler state %s: %w", path, err)
+	}
 	return nil
+}
+
+// writeStateFile writes body, syncs it to disk, and closes the file.
+func writeStateFile(file *os.File, body []byte) error {
+	if err := file.Chmod(0o600); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if _, err := file.Write(body); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		_ = file.Close()
+		return err
+	}
+	return file.Close()
 }
 
 // NextRateLimitBackoff doubles the current backoff, capped at the maximum.
