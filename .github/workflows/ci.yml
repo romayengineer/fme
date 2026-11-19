@@ -27,8 +27,8 @@ jobs:
     outputs:
       list: ${{ steps.list.outputs.list }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: go.work.sum
@@ -46,12 +46,12 @@ jobs:
       matrix:
         module: ${{ fromJson(needs.modules.outputs.list) }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: go.work.sum
-      - uses: golangci-lint-action@v8
+      - uses: golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           working-directory: ${{ matrix.module }}
@@ -62,12 +62,12 @@ jobs:
     needs: modules
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: go.work.sum
-      - uses: golangci-lint-action@v8
+      - uses: golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           install-only: true
@@ -78,6 +78,41 @@ jobs:
             (cd "$m" && golangci-lint fmt --diff ./...)
           done
 
+  vuln:
+    name: govulncheck
+    needs: modules
+    runs-on: ubuntu-latest
+    # Non-blocking until PocketBase is upgraded (fme-1ke.6): v0.21.3 currently
+    # reports known vulnerabilities. Make this blocking after that migration.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: go.work.sum
+      - name: Scan the binary's dependency graph
+        working-directory: go/cmd/fme
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+          govulncheck ./...
+
+  shell:
+    name: shell
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: ShellCheck
+        run: shellcheck -S warning scripts/*.sh
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: go.work.sum
+      - name: shfmt
+        run: |
+          go install mvdan.cc/sh/v3/cmd/shfmt@v3.11.0
+          "$(go env GOPATH)/bin/shfmt" -d -i 4 -ci scripts
+
   test:
     name: test (${{ matrix.module }})
     needs: modules
@@ -87,13 +122,18 @@ jobs:
       matrix:
         module: ${{ fromJson(needs.modules.outputs.list) }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: go.work.sum
-      - name: Vet and test
+      - name: Vet, test, and measure coverage
         working-directory: ${{ matrix.module }}
         run: |
           go vet ./...
-          go test -race ./...
+          go test -race -coverprofile=coverage.out ./...
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage-${{ replace(matrix.module, '/', '-') }}
+          path: ${{ matrix.module }}/coverage.out
+          if-no-files-found: ignore

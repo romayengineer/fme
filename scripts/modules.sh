@@ -10,6 +10,6 @@ export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.25.14}"
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
-cd "$ROOT_DIR"
+cd "$ROOT_DIR" || exit 1
 
 go list -m -f '{{.Dir}}' | sed "s|^$ROOT_DIR/||"

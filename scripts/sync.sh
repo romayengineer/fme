@@ -61,12 +61,21 @@ while [ "$#" -gt 0 ]; do
     case "$1" in
         --pull) PULL=1 ;;
         --delete) DELETE=1 ;;
-        --dry-run|-n) DRY_RUN=1 ;;
+        --dry-run | -n) DRY_RUN=1 ;;
         --save) RUN_SAVE=1 ;;
-        --host) shift; HOST_OVERRIDE="${1:-}" ;;
-        --dir) shift; DIR_OVERRIDE="${1:-}" ;;
-        -h|--help) usage 0 ;;
-        *) echo "unknown option: $1" >&2; usage 1 ;;
+        --host)
+            shift
+            HOST_OVERRIDE="${1:-}"
+            ;;
+        --dir)
+            shift
+            DIR_OVERRIDE="${1:-}"
+            ;;
+        -h | --help) usage 0 ;;
+        *)
+            echo "unknown option: $1" >&2
+            usage 1
+            ;;
     esac
     shift
 done
@@ -75,9 +84,12 @@ step() { printf '\n\033[1;34m==>\033[0m \033[1m%s\033[0m\n' "$*"; }
 info() { printf '    %s\n' "$*"; }
 ok() { printf '    \033[32m✓\033[0m %s\n' "$*"; }
 warn() { printf '    \033[33m!\033[0m %s\n' "$*"; }
-die() { printf '\n\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
+die() {
+    printf '\n\033[31merror:\033[0m %s\n' "$*" >&2
+    exit 1
+}
 
-cd "$ROOT_DIR"
+cd "$ROOT_DIR" || exit 1
 
 # --- configuration -----------------------------------------------------------
 # Precedence: CLI flag > environment variable > .env key > built-in default.
@@ -126,12 +138,12 @@ fi
 
 step "Checking the remote"
 
-ssh -o BatchMode=yes -o ConnectTimeout=8 "$REMOTE" true 2>/dev/null \
-    || die "cannot reach $REMOTE over SSH (try: ssh $REMOTE)"
+ssh -o BatchMode=yes -o ConnectTimeout=8 "$REMOTE" true 2>/dev/null ||
+    die "cannot reach $REMOTE over SSH (try: ssh $REMOTE)"
 ok "SSH connection to $REMOTE works"
 
-ssh -o BatchMode=yes -o ConnectTimeout=8 "$REMOTE" "test -d \"\$HOME/$REMOTE_DIR/.git\"" 2>/dev/null \
-    || die "no git project at $REMOTE:~/$REMOTE_DIR (clone it first, or pass --dir)"
+ssh -o BatchMode=yes -o ConnectTimeout=8 "$REMOTE" "test -d \"\$HOME/$REMOTE_DIR/.git\"" 2>/dev/null ||
+    die "no git project at $REMOTE:~/$REMOTE_DIR (clone it first, or pass --dir)"
 ok "remote project found at ~/$REMOTE_DIR"
 
 # --- transfer ----------------------------------------------------------------

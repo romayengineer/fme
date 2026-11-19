@@ -57,22 +57,69 @@ EOF
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
-        --profile) [ "$#" -ge 2 ] || { echo "missing value for --profile" >&2; exit 1; }; CLI_PROFILE="$2"; shift 2 ;;
-        --source) [ "$#" -ge 2 ] || { echo "missing value for --source" >&2; exit 1; }; CLI_SOURCE="$2"; shift 2 ;;
-        --dest) [ "$#" -ge 2 ] || { echo "missing value for --dest" >&2; exit 1; }; CLI_DEST="$2"; shift 2 ;;
-        --if-needed) IF_NEEDED=1; shift ;;
-        --auto) AUTO=1; IF_NEEDED=1; QUIET=1; shift ;;
-        --detect) DETECT=1; shift ;;
-        --force|-f) shift ;;  # kept for compatibility; copying no longer needs it
-        --dry-run) DRY_RUN=1; shift ;;
-        -h|--help) usage 0 ;;
-        *) echo "unknown option: $1" >&2; usage 1 ;;
+        --profile)
+            [ "$#" -ge 2 ] || {
+                echo "missing value for --profile" >&2
+                exit 1
+            }
+            CLI_PROFILE="$2"
+            shift 2
+            ;;
+        --source)
+            [ "$#" -ge 2 ] || {
+                echo "missing value for --source" >&2
+                exit 1
+            }
+            CLI_SOURCE="$2"
+            shift 2
+            ;;
+        --dest)
+            [ "$#" -ge 2 ] || {
+                echo "missing value for --dest" >&2
+                exit 1
+            }
+            CLI_DEST="$2"
+            shift 2
+            ;;
+        --if-needed)
+            IF_NEEDED=1
+            shift
+            ;;
+        --auto)
+            AUTO=1
+            IF_NEEDED=1
+            QUIET=1
+            shift
+            ;;
+        --detect)
+            DETECT=1
+            shift
+            ;;
+        --force | -f) shift ;; # kept for compatibility; copying no longer needs it
+        --dry-run)
+            DRY_RUN=1
+            shift
+            ;;
+        -h | --help) usage 0 ;;
+        *)
+            echo "unknown option: $1" >&2
+            usage 1
+            ;;
     esac
 done
 
-info() { [ "$QUIET" -eq 1 ] && return 0; printf '    %s\n' "$*"; }
-ok() { [ "$QUIET" -eq 1 ] && return 0; printf '    \033[32m✓\033[0m %s\n' "$*"; }
-warn() { [ "$QUIET" -eq 1 ] && return 0; printf '    \033[33m!\033[0m %s\n' "$*" >&2; }
+info() {
+    [ "$QUIET" -eq 1 ] && return 0
+    printf '    %s\n' "$*"
+}
+ok() {
+    [ "$QUIET" -eq 1 ] && return 0
+    printf '    \033[32m✓\033[0m %s\n' "$*"
+}
+warn() {
+    [ "$QUIET" -eq 1 ] && return 0
+    printf '    \033[33m!\033[0m %s\n' "$*" >&2
+}
 die() {
     # In --auto mode a failed refresh must not break a scrape that still has a
     # usable copy; warn and let the scraper decide.
@@ -140,7 +187,10 @@ cookie_db() {
 fb_cookie_count() {
     local prof="$1" db tmpdir n
     db="$(cookie_db "$prof")"
-    [ -n "$db" ] || { printf '0\n'; return 0; }
+    [ -n "$db" ] || {
+        printf '0\n'
+        return 0
+    }
 
     tmpdir="$(mktemp -d)"
     cp -f "$db" "$tmpdir/Cookies" 2>/dev/null || true
@@ -169,7 +219,10 @@ has_fb_session() {
 
 file_mtime() {
     local f="$1"
-    [ -f "$f" ] || { printf '0\n'; return 0; }
+    [ -f "$f" ] || {
+        printf '0\n'
+        return 0
+    }
     if stat -c %Y "$f" >/dev/null 2>&1; then
         stat -c %Y "$f"
     else
@@ -187,7 +240,7 @@ real_profiles() {
         # also holds component/cache directories we must skip.
         [ -f "$entry/Preferences" ] || continue
         name="$(basename "$entry")"
-        case "$name" in "System Profile"|"Guest Profile") continue ;; esac
+        case "$name" in "System Profile" | "Guest Profile") continue ;; esac
         printf '%s\n' "$name"
     done
     shopt -u nullglob
@@ -214,7 +267,7 @@ if [ "$DETECT" -eq 1 ]; then
             best="$name"
             best_mtime="${mtime:-0}"
         fi
-    done <<< "$(real_profiles)"
+    done <<<"$(real_profiles)"
 
     if [ "$default_found" -eq 1 ]; then
         SOURCE_PROFILE="Default"
@@ -229,8 +282,8 @@ if [ "$DETECT" -eq 1 ]; then
     fi
 fi
 
-[ -d "$SRC/$SOURCE_PROFILE" ] \
-    || die "profile '$SOURCE_PROFILE' not found in $SRC (pick one with --profile)"
+[ -d "$SRC/$SOURCE_PROFILE" ] ||
+    die "profile '$SOURCE_PROFILE' not found in $SRC (pick one with --profile)"
 
 SOURCE_PROFILE_DIR="$SRC/$SOURCE_PROFILE"
 
@@ -255,10 +308,10 @@ if [ -f "$MARKER" ]; then
 fi
 
 if [ "$IF_NEEDED" -eq 1 ]; then
-    if [ "$marker_profile" = "$DEST_PROFILE" ] \
-        && [ "$marker_source" = "$SOURCE_PROFILE" ] \
-        && [ -n "$marker_epoch" ] \
-        && [ "${source_mtime:-0}" -le "$marker_epoch" ] 2>/dev/null; then
+    if [ "$marker_profile" = "$DEST_PROFILE" ] &&
+        [ "$marker_source" = "$SOURCE_PROFILE" ] &&
+        [ -n "$marker_epoch" ] &&
+        [ "${source_mtime:-0}" -le "$marker_epoch" ] 2>/dev/null; then
         info "profile '$DEST_PROFILE' is up to date with '$SOURCE_PROFILE'; nothing to do"
         exit 0
     fi
@@ -273,7 +326,7 @@ if pgrep -f -- "--user-data-dir=$DEST" >/dev/null 2>&1; then
     die "$DEST is in use by a running browser (user-data-dir in use); close it and re-run"
 fi
 
-info "source:      $SRC/$SOURCE_PROFILE ($( [ -n "$source_db" ] && printf '%s' "${source_db#$SOURCE_PROFILE_DIR/}" || printf 'no cookie db' ))"
+info "source:      $SRC/$SOURCE_PROFILE ($([ -n "$source_db" ] && printf '%s' "${source_db#$SOURCE_PROFILE_DIR/}" || printf 'no cookie db'))"
 info "destination: $DEST_PROFILE_DIR"
 
 if [ "$DRY_RUN" -eq 1 ]; then
@@ -313,9 +366,9 @@ if [ -n "$source_db" ]; then
     rm -f "$dest_db-journal" "$dest_db-wal" "$dest_db-shm"
 
     tmp_db="$(mktemp "$DEST_PROFILE_DIR/.cookies.XXXXXX")"
-    if command -v sqlite3 >/dev/null 2>&1 \
-        && sqlite3 "$source_db" ".backup '$tmp_db'" >/dev/null 2>&1 \
-        && [ -s "$tmp_db" ]; then
+    if command -v sqlite3 >/dev/null 2>&1 &&
+        sqlite3 "$source_db" ".backup '$tmp_db'" >/dev/null 2>&1 &&
+        [ -s "$tmp_db" ]; then
         mv -f "$tmp_db" "$dest_db"
     else
         rm -f "$tmp_db"
@@ -332,7 +385,7 @@ fi
 
 printf 'profile=%s\nsource_profile=%s\nsource=%s\nrefreshed_at=%s\nrefreshed_epoch=%s\n' \
     "$DEST_PROFILE" "$SOURCE_PROFILE" "$SRC" \
-    "$(date -u +%FT%TZ)" "$(date -u +%s)" > "$MARKER"
+    "$(date -u +%FT%TZ)" "$(date -u +%s)" >"$MARKER"
 
 env_dest_now="$(env_value FME_USER_DATA_DIR)"
 if [ -n "$env_dest_now" ] && [ "$env_dest_now" != "$DEST" ]; then

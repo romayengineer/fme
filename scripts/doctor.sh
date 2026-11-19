@@ -11,14 +11,20 @@ export GOTOOLCHAIN="${GOTOOLCHAIN:-go1.25.14}"
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
-cd "$ROOT_DIR"
+cd "$ROOT_DIR" || exit 1
 
 FAILURES=0
 WARNINGS=0
 
 pass() { printf '  \033[32m✓\033[0m %s\n' "$*"; }
-fail() { printf '  \033[31m✗\033[0m %s\n' "$*"; FAILURES=$((FAILURES + 1)); }
-warn() { printf '  \033[33m!\033[0m %s\n' "$*"; WARNINGS=$((WARNINGS + 1)); }
+fail() {
+    printf '  \033[31m✗\033[0m %s\n' "$*"
+    FAILURES=$((FAILURES + 1))
+}
+warn() {
+    printf '  \033[33m!\033[0m %s\n' "$*"
+    WARNINGS=$((WARNINGS + 1))
+}
 fix() { printf '      \033[2mfix: %s\033[0m\n' "$*"; }
 section() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 
@@ -49,8 +55,8 @@ else
     fix "install just: https://github.com/casey/just#installation"
 fi
 
-if command -v google-chrome >/dev/null 2>&1 || command -v chromium >/dev/null 2>&1 \
-    || [ -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ]; then
+if command -v google-chrome >/dev/null 2>&1 || command -v chromium >/dev/null 2>&1 ||
+    [ -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ]; then
     pass "Google Chrome is installed"
 else
     fail "Google Chrome not found on PATH"
@@ -72,7 +78,7 @@ if [ -f "$env_file" ]; then
     pass ".env exists"
     env_perms="$(env_mode "$env_file")"
     case "$env_perms" in
-        600|400) pass ".env permissions: $env_perms" ;;
+        600 | 400) pass ".env permissions: $env_perms" ;;
         *)
             warn ".env is readable by other users (mode $env_perms); it may contain FME_PASSWORD"
             fix "chmod 600 $env_file"
@@ -81,7 +87,7 @@ if [ -f "$env_file" ]; then
     if [ -f "$env_file.bak" ]; then
         backup_perms="$(env_mode "$env_file.bak")"
         case "$backup_perms" in
-            600|400) ;;
+            600 | 400) ;;
             *)
                 warn ".env.bak is readable by other users (mode $backup_perms)"
                 fix "chmod 600 $env_file.bak"
@@ -95,10 +101,10 @@ if [ -f "$env_file" ]; then
 
     if [ -n "$user_data_dir" ]; then
         pass "FME_USER_DATA_DIR=$user_data_dir"
-        [ -n "$profile_directory" ] && pass "FME_PROFILE_DIRECTORY=$profile_directory" \
-            || warn "FME_PROFILE_DIRECTORY unset; defaults to the profile in Local State"
-        [ -n "$channel" ] && pass "FME_BROWSER_CHANNEL=$channel" \
-            || warn "FME_BROWSER_CHANNEL unset; system Chromium will be used instead of Chrome"
+        [ -n "$profile_directory" ] && pass "FME_PROFILE_DIRECTORY=$profile_directory" ||
+            warn "FME_PROFILE_DIRECTORY unset; defaults to the profile in Local State"
+        [ -n "$channel" ] && pass "FME_BROWSER_CHANNEL=$channel" ||
+            warn "FME_BROWSER_CHANNEL unset; system Chromium will be used instead of Chrome"
     elif grep -q '^FME_USERNAME=' "$env_file"; then
         warn "using credential login (FME_USERNAME); a captcha must be solved on every new session"
     else

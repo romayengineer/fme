@@ -1,0 +1,38 @@
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /go/analytics
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: /go/app
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: /go/browser
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: /go/capture
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: /go/cmd/fme
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: /go/core
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: /go/marketplace
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: /go/store
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
