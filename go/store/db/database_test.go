@@ -58,12 +58,13 @@ func TestSaveProductUpdatesExistingRow(t *testing.T) {
 	database := newTestDB(t)
 
 	product := model.MarketplaceItemDetails{ID: "123", Title: "First Title"}
-	_, err := database.SaveProduct(product)
+	firstID, err := database.SaveProduct(product)
 	require.NoError(t, err)
 
 	product.Title = "Second Title"
-	_, err = database.SaveProduct(product)
+	secondID, err := database.SaveProduct(product)
 	require.NoError(t, err)
+	require.Equal(t, firstID, secondID)
 
 	var got struct {
 		Title string `db:"title"`
@@ -108,13 +109,43 @@ func TestSaveProductPropagatesDatabaseErrors(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestSaveProductsPropagatesDatabaseErrors(t *testing.T) {
+func TestSaveProductsStoresBatch(t *testing.T) {
 	database := newTestDB(t)
-	require.NoError(t, database.app.DB().Close())
 
 	count, err := database.SaveProducts([]model.MarketplaceItemDetails{
-		{ID: "1"},
-		{ID: "2"},
+		{ID: "batch-1", Title: "One"},
+		{ID: "batch-2", Title: "Two"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 2, count)
+
+	for _, id := range []string{"batch-1", "batch-2"} {
+		exists, err := database.ProductExists(id)
+		require.NoError(t, err)
+		require.True(t, exists, "product %s was not stored", id)
+	}
+}
+
+func TestSaveProductsCommitsValidRowsInBatch(t *testing.T) {
+	database := newTestDB(t)
+
+	count, err := database.SaveProducts([]model.MarketplaceItemDetails{
+		{ID: "bad", PriceAmount: "not-a-number"},
+		{ID: "good"},
+	})
+	require.Error(t, err)
+	require.Equal(t, 1, count)
+
+	exists, err := database.ProductExists("good")
+	require.NoError(t, err)
+	require.True(t, exists)
+}
+
+func TestSaveProductsPropagatesRowErrors(t *testing.T) {
+	database := newTestDB(t)
+
+	count, err := database.SaveProducts([]model.MarketplaceItemDetails{
+		{ID: "1", PriceAmount: "not-a-number"},
 	})
 	require.Error(t, err)
 	require.Zero(t, count)

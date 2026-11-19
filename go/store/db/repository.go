@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/pocketbase/pocketbase/daos"
 	"github.com/pocketbase/pocketbase/models"
 
 	"github.com/romayengineer/fme/go/core/logging"
@@ -115,25 +116,37 @@ const upsertProductSQL = `INSERT INTO products (
 		is_hidden = excluded.is_hidden,
 		is_live = excluded.is_live,
 		is_pending = excluded.is_pending,
-		is_sold = excluded.is_sold`
+		is_sold = excluded.is_sold
+	RETURNING id`
 
-// UpsertProduct inserts or updates the product row keyed by facebook_id.
-func (db *PocketBaseDB) UpsertProduct(product model.MarketplaceItemDetails) (sql.Result, error) {
+// UpsertProduct inserts or updates the product row keyed by facebook_id and
+// returns its PocketBase row id.
+func (db *PocketBaseDB) UpsertProduct(product model.MarketplaceItemDetails) (string, error) {
+	return upsertProduct(db.app.Dao(), product)
+}
+
+// upsertProduct runs the upsert through dao and returns the row id. RETURNING
+// avoids the follow-up SELECT that the old implementation needed.
+func upsertProduct(dao *daos.Dao, product model.MarketplaceItemDetails) (string, error) {
 	facebookID := toString(product.ID)
 
 	nums, err := productNumericFields(product)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
-	result, err := db.app.Dao().DB().NewQuery(upsertProductSQL).
-		Bind(productBindValues(product, facebookID, nums)).Execute()
+	var row struct {
+		ID string `db:"id"`
+	}
+	err = dao.DB().NewQuery(upsertProductSQL).
+		Bind(productBindValues(product, facebookID, nums)).
+		One(&row)
 	if err != nil {
 		logging.LogError0("SaveProduct", "failed to upsert product", "facebook_id", facebookID, "error", err)
-		return result, err
+		return "", err
 	}
 
-	return result, nil
+	return row.ID, nil
 }
 
 // productBindValues builds the upsert query parameters for one product.
@@ -190,32 +203,39 @@ func (db *PocketBaseDB) SaveProduct(product model.MarketplaceItemDetails) (strin
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
-	if _, err := db.UpsertProduct(product); err != nil {
-		return "", fmt.Errorf("save product %v: %w", product.ID, err)
-	}
-
-	productID, err := db.GetProductID(product)
+	productID, err := upsertProduct(db.app.Dao(), product)
 	if err != nil {
-		return "", fmt.Errorf("get saved product id for %v: %w", product.ID, err)
+		return "", fmt.Errorf("save product %v: %w", product.ID, err)
 	}
 
 	logging.LogDebug0("SaveProduct", "product saved", "productID", productID, "facebook_id", product.ID)
 	return productID, nil
 }
 
-// SaveProducts saves every product and returns how many succeeded, joined with
-// the errors of the ones that failed.
+// SaveProducts upserts every product in one transaction and returns how many
+// succeeded, joined with the errors of the ones that failed. Successful rows
+// commit even when another row in the batch fails.
 func (db *PocketBaseDB) SaveProducts(products []model.MarketplaceItemDetails) (int, error) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
 	count := 0
 	var errs []error
-	for _, product := range products {
-		if _, err := db.SaveProduct(product); err != nil {
-			logging.LogError0("SaveProducts", "error saving product", "facebook_id", product.ID, "error", err)
-			errs = append(errs, err)
-			continue
+	runErr := db.app.Dao().RunInTransaction(func(txDao *daos.Dao) error {
+		for _, product := range products {
+			if _, err := upsertProduct(txDao, product); err != nil {
+				logging.LogError0("SaveProducts", "error saving product", "facebook_id", product.ID, "error", err)
+				errs = append(errs, err)
+				continue
+			}
+			count++
 		}
-		count++
+		return nil
+	})
+	if runErr != nil {
+		errs = append(errs, runErr)
 	}
+
 	logging.LogInfo0("SaveProducts", "batch save completed", "count", count, "total", len(products))
 	return count, errors.Join(errs...)
 }
