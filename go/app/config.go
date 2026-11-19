@@ -25,11 +25,20 @@ type Config struct {
 	Headless *bool
 }
 
+// LoadEnv loads .env when it exists. A missing file is fine: configuration can
+// come entirely from the process environment (containers, CI, installed binary).
+func LoadEnv() error {
+	if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("load .env file: %w", err)
+	}
+	return nil
+}
+
 // LoadConfig loads .env (if present) and resolves the browser session settings.
 // A persistent Chrome profile is preferred; username/password is the fallback.
 func LoadConfig() (*Config, error) {
-	if err := godotenv.Load(); err != nil {
-		return nil, fmt.Errorf("load .env file: %w", err)
+	if err := LoadEnv(); err != nil {
+		return nil, err
 	}
 
 	config := configFromEnv()

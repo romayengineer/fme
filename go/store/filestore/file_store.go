@@ -6,9 +6,6 @@ import (
 	"github.com/romayengineer/fme/go/store/paths"
 )
 
-// DataDir is the root of the scraped data directory.
-const DataDir = paths.DataDir
-
 // FileStore is a read-modify-write store for one JSON file.
 type FileStore[T any] = jsonstore.FileStore[T]
 

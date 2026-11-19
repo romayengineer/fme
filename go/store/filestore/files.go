@@ -261,7 +261,7 @@ func dataWalkRoot(prefix string) string {
 	if prefix == paths.DetailPrefix {
 		return paths.DetailDir()
 	}
-	return DataDir
+	return paths.DataDir()
 }
 
 // collectDataFile appends a matching file and reports whether to skip the

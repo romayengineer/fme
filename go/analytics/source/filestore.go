@@ -16,9 +16,6 @@ import (
 	"github.com/romayengineer/fme/go/store/paths"
 )
 
-// DefaultDir is where product detail files live.
-var DefaultDir = paths.DetailDir()
-
 // FileSource reads product locations from data/__Details/detail_*.json, the same
 // files the rest of FME materializes, so heat maps work without the PocketBase
 // database. File reads are parallelized across workers; results are replayed in
@@ -27,7 +24,7 @@ var DefaultDir = paths.DetailDir()
 // The located points are read once and cached, so filters that need a first pass
 // over the data (like the city-centroid filter) do not re-read the directory.
 type FileSource struct {
-	Dir     string // defaults to DefaultDir
+	Dir     string // defaults to paths.DetailDir()
 	Workers int    // defaults to GOMAXPROCS
 
 	mu     sync.Mutex
@@ -88,7 +85,7 @@ func (s *FileSource) locate() []analytics.LocatedPoint {
 
 	dir := s.Dir
 	if dir == "" {
-		dir = DefaultDir
+		dir = paths.DetailDir()
 	}
 	workers := s.Workers
 	if workers <= 0 {

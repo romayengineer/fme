@@ -89,6 +89,11 @@ func run() error {
 	}
 	logging.LogInfo0("main", "flags", "action", flags.action)
 
+	// Load .env before any action resolves FME_DATA_DIR or browser settings.
+	if err := app.LoadEnv(); err != nil {
+		logging.LogWarn0("main", "load .env", "error", err)
+	}
+
 	if flags.listMaps {
 		printMaps()
 		return nil

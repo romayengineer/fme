@@ -111,7 +111,8 @@ you to log in first. Without a profile it also accepts `FME_USERNAME`/`FME_PASSW
 | `just build` / `just test` / `just lint` / `just vet` | Build and quality gates |
 | `just ml-install` / `just ml-train` | Python price-model pipeline |
 
-`just search` pauses on `waiting for input:` — press Enter to finish.
+`just search` pauses on `waiting for input:` — press Enter to finish. The pause
+only happens when stdin is a terminal, so cron and CI runs never block.
 
 ## Running unattended
 
@@ -132,6 +133,14 @@ A cycle starts every 6 hours by default. Progress and the rate-limit backoff are
 persisted in `data/scheduler-state.json`, so restarts resume instead of
 repeating work. See [docs/scheduling.md](docs/scheduling.md) for terms, flags,
 retention, and troubleshooting.
+
+## Data directory
+
+Everything is written under `data/` by default. Set `FME_DATA_DIR` (process
+environment or `.env`) to relocate the scraped responses, detail records, and
+PDP state; heat maps default to `$FME_DATA_DIR/analytics/heatmap`. The scheduler
+writes `scheduler-state.json` and its lock file in the same root, so a single
+`FME_DATA_DIR` also relocates the daemon's bookkeeping.
 
 ## Syncing data to a server
 

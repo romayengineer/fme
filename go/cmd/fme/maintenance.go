@@ -7,7 +7,7 @@ import (
 )
 
 func printDescriptionStats(stats app.DescriptionStats) {
-	fmt.Println("data/__Details description report")
+	fmt.Println("description coverage report")
 	fmt.Printf("  total listings:    %d\n", stats.Total)
 	fmt.Printf("  with description:  %d (%.2f%%)\n", stats.WithDescription, stats.WithDescriptionPercent())
 	fmt.Printf("  unavailable:       %d (%.2f%%)  deleted listings (skipped by pull-description)\n", stats.Unavailable, stats.UnavailablePercent())

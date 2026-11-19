@@ -5,7 +5,20 @@ import (
 	"testing"
 )
 
+func TestDataDirFromEnv(t *testing.T) {
+	t.Setenv("FME_DATA_DIR", "/mnt/fme-data")
+	if got := DataDir(); got != "/mnt/fme-data" {
+		t.Errorf("DataDir = %q, want /mnt/fme-data", got)
+	}
+
+	t.Setenv("FME_DATA_DIR", "")
+	if got := DataDir(); got != "data" {
+		t.Errorf("DataDir = %q, want data", got)
+	}
+}
+
 func TestDetailPaths(t *testing.T) {
+	t.Setenv("FME_DATA_DIR", "")
 	if got := DetailDir(); got != filepath.Join("data", "__Details") {
 		t.Errorf("DetailDir = %q", got)
 	}
@@ -18,6 +31,7 @@ func TestDetailPaths(t *testing.T) {
 }
 
 func TestResponsePaths(t *testing.T) {
+	t.Setenv("FME_DATA_DIR", "")
 	got := ResponseFile("Query", ResponsePrefix, 1700000000, 42)
 	want := filepath.Join("data", "Query", "response_1700000000_000042.json")
 	if got != want {

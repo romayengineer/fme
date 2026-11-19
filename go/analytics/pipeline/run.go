@@ -10,11 +10,14 @@ import (
 	"github.com/romayengineer/fme/go/analytics"
 	"github.com/romayengineer/fme/go/analytics/heatmap"
 	"github.com/romayengineer/fme/go/analytics/source"
+	"github.com/romayengineer/fme/go/store/paths"
 )
 
 // DefaultOutBase is the output path prefix; files are named
-// <OutBase>.<map>.html and <OutBase>.geojson.
-const DefaultOutBase = "data/analytics/heatmap"
+// <OutBase>.<map>.html and <OutBase>.geojson. It follows FME_DATA_DIR.
+func DefaultOutBase() string {
+	return filepath.Join(paths.DataDir(), "analytics", "heatmap")
+}
 
 // MapAll selects every registered map.
 const MapAll = "all"
@@ -23,7 +26,7 @@ const MapAll = "all"
 type Options struct {
 	Dir            string  // detail files dir; defaults to data/__Details
 	CellDeg        float64 // grid cell size in degrees; defaults to heatmap.DefaultCellDeg
-	OutBase        string  // output path without extension; defaults to DefaultOutBase
+	OutBase        string  // output path without extension; defaults to DefaultOutBase()
 	Title          string  // map/page title
 	Workers        int     // file read concurrency; defaults to GOMAXPROCS
 	Map            string  // map id, "all", or "" for the default map
@@ -46,7 +49,7 @@ type Result struct {
 // selected map.
 func RunFileHeatmap(opts Options) (Result, error) {
 	if opts.OutBase == "" {
-		opts.OutBase = DefaultOutBase
+		opts.OutBase = DefaultOutBase()
 	}
 	if opts.Title == "" {
 		opts.Title = "Marketplace product heat map"

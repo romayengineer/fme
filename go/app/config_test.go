@@ -77,6 +77,23 @@ func TestLoadConfigWithCredentials(t *testing.T) {
 	}
 }
 
+func TestLoadConfigWithoutEnvFileUsesEnvironment(t *testing.T) {
+	t.Chdir(t.TempDir())
+	unsetEnv(t, "FME_USER_DATA_DIR", "FME_USERNAME", "FME_PASSWORD", "FME_BROWSER_CHANNEL", "FME_PROFILE_DIRECTORY")
+	t.Setenv("FME_USER_DATA_DIR", "/tmp/env-profile")
+
+	config, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if config.UserDataDir != "/tmp/env-profile" {
+		t.Errorf("UserDataDir = %q, want /tmp/env-profile", config.UserDataDir)
+	}
+	if config.BrowserChannel != "chrome" {
+		t.Errorf("BrowserChannel = %q, want chrome", config.BrowserChannel)
+	}
+}
+
 func TestLoadConfigRequiresCredentialsOrProfile(t *testing.T) {
 	t.Chdir(t.TempDir())
 	unsetEnv(t, "FME_USER_DATA_DIR", "FME_USERNAME", "FME_PASSWORD")

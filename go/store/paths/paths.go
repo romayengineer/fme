@@ -3,14 +3,15 @@ package paths
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 )
 
 const (
-	// DataDir is the root of all scraped data.
-	DataDir = "data"
+	// defaultDataDir is used when FME_DATA_DIR is unset.
+	defaultDataDir = "data"
 	// DetailDirName holds the merged detail records.
 	DetailDirName = "__Details"
 	// PDPDirName holds captured MarketplacePDPContainerQuery responses.
@@ -31,14 +32,24 @@ const (
 	SchedulerLockFile = ".scheduler.lock"
 )
 
+// DataDir is the root of all scraped data. FME_DATA_DIR overrides the
+// repository-local "data" default; it is read on every call so callers can
+// load .env before touching the filesystem.
+func DataDir() string {
+	if dir := os.Getenv("FME_DATA_DIR"); dir != "" {
+		return dir
+	}
+	return defaultDataDir
+}
+
 // DetailDir is the directory of merged product detail records.
 func DetailDir() string {
-	return filepath.Join(DataDir, DetailDirName)
+	return filepath.Join(DataDir(), DetailDirName)
 }
 
 // PDPDir is the directory of captured PDP responses and state files.
 func PDPDir() string {
-	return filepath.Join(DataDir, PDPDirName)
+	return filepath.Join(DataDir(), PDPDirName)
 }
 
 // PDPDebugDir is the directory of raw diagnostic PDP payloads.
@@ -76,7 +87,7 @@ func DetailFilePath(productID string) string {
 // <DataDir>/<friendlyName>/<prefix>_<timestamp>_<random>.json.
 func ResponseFile(friendlyName, prefix string, timestamp int64, random int) string {
 	name := fmt.Sprintf("%s_%d_%06d.json", prefix, timestamp, random)
-	return filepath.Join(DataDir, friendlyName, name)
+	return filepath.Join(DataDir(), friendlyName, name)
 }
 
 // ResponseFileByID returns a deterministic response path keyed by id. The
@@ -84,7 +95,7 @@ func ResponseFile(friendlyName, prefix string, timestamp int64, random int) stri
 // ParseTimestamp expects.
 func ResponseFileByID(friendlyName, prefix, id string) string {
 	name := fmt.Sprintf("%s_0_%s.json", prefix, id)
-	return filepath.Join(DataDir, friendlyName, name)
+	return filepath.Join(DataDir(), friendlyName, name)
 }
 
 // ResponseIDFromFileName returns the product id encoded in an id-keyed

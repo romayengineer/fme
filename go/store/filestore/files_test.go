@@ -202,7 +202,7 @@ func TestSaveProductsIfAnySkipsInvalidIDs(t *testing.T) {
 		t.Fatal("SaveProductsIfAny = false, want true")
 	}
 
-	entries, err := os.ReadDir(filepath.Join(DataDir, "__Details"))
+	entries, err := os.ReadDir(filepath.Join(paths.DataDir(), "__Details"))
 	if err != nil {
 		t.Fatalf("read details dir: %v", err)
 	}

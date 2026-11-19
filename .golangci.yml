@@ -220,6 +220,7 @@ linters:
             - "github.com/romayengineer/fme/go/analytics$"
             - "github.com/romayengineer/fme/go/analytics/heatmap$"
             - "github.com/romayengineer/fme/go/analytics/source$"
+            - "github.com/romayengineer/fme/go/store/paths"
 
         browser_driver:
           files:

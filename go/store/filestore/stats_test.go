@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/romayengineer/fme/go/store/paths"
 	"github.com/romayengineer/fme/go/store/pdpstate"
 )
 
@@ -15,7 +16,7 @@ func newDetailDir(t *testing.T) string {
 	t.Helper()
 
 	t.Chdir(t.TempDir())
-	dir := filepath.Join(DataDir, "__Details")
+	dir := paths.DetailDir()
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
