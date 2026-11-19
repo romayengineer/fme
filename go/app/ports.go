@@ -53,8 +53,8 @@ type PDPFetcher interface {
 
 // DetailStore is the application view of the data/__Details store.
 type DetailStore interface {
-	// ProcessResponses materializes captured responses newer than startTime.
-	ProcessResponses(startTime int64) (int64, error)
+	// ProcessResponses materializes every captured response.
+	ProcessResponses() error
 	// ForEachDetail calls process for every detail record.
 	ForEachDetail(process func(filePath string, jsonData map[string]any) bool, sortit bool) (int, error)
 	// LoadPDPProductIDs returns the ids that already have a PDP response.

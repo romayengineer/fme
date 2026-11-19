@@ -60,72 +60,57 @@ func SaveProductsFrom(jsonDatas []any) int {
 
 // processState accumulates the counters for one ProcessData run.
 type processState struct {
-	startTime      int64
 	extractors     extract.ProductExtractors
-	lastFilePath   string
 	filesProcessed int
 	filesDeleted   int
 	gotRateLimit   bool
 }
 
-// ProcessData extracts products from every captured response newer than
-// startTime, deletes responses that yield no product, and returns the timestamp
-// of the last processed file.
-func ProcessData(startTime int64) (int64, error) {
-	state := &processState{
-		startTime:  startTime,
-		extractors: extract.NewProductExtractors(),
-	}
+// ProcessData extracts products from every captured response, deletes
+// responses that yield no product, and keeps throttled payloads for diagnosis.
+func ProcessData() error {
+	state := &processState{extractors: extract.NewProductExtractors()}
 
 	filesRead, err := ForEachResponse(state.process, true)
-	lastTimestamp, _ := GetTimestamp(state.lastFilePath)
 
 	logging.LogInfo0("ProcessData", "all files processed",
-		"lastTimestamp", lastTimestamp,
 		"filesProcessedCounter", state.filesProcessed,
 		"filesReadCounter", filesRead,
 		"filesDeletedCounter", state.filesDeleted)
 
 	if state.gotRateLimit {
-		logging.LogWarn0("ProcessData", "got rate limit")
+		logging.LogWarn0("ProcessData", "got rate limit; throttled payloads kept as rate_limited_*")
 	}
 
-	return lastTimestamp, err
+	return err
 }
 
 // process handles one captured response file.
 func (s *processState) process(filePath string, jsonData map[string]any) bool {
-	s.lastFilePath = filePath
-
-	if !s.shouldProcess(filePath) {
-		return true
-	}
-
 	s.filesProcessed++
 
 	if SaveProductsIfAny(s.extractors.ExtractAll(jsonData)) {
 		return true
 	}
+	if extract.IsErrorRateLimit(jsonData) {
+		s.gotRateLimit = true
+		s.keepRateLimitResponse(filePath)
+		return true
+	}
 
-	s.recordRateLimit(jsonData)
 	s.deleteResponse(filePath)
 	return true
 }
 
-// shouldProcess reports whether the file is newer than the run's start time.
-func (s *processState) shouldProcess(filePath string) bool {
-	fileTimestamp, err := GetTimestamp(filePath)
-	if err != nil {
-		return false
+// keepRateLimitResponse renames a throttled payload so ForEachResponse stops
+// selecting it while the body stays available for inspection.
+func (s *processState) keepRateLimitResponse(filePath string) {
+	kept := filepath.Join(filepath.Dir(filePath), "rate_limited_"+filepath.Base(filePath))
+	if err := os.Rename(filePath, kept); err != nil {
+		logging.LogError0("ProcessData", "could not keep rate-limited response", "path", filePath, "error", err)
+		return
 	}
-	return fileTimestamp >= s.startTime
-}
-
-// recordRateLimit remembers that Facebook throttled the run.
-func (s *processState) recordRateLimit(jsonData map[string]any) {
-	if extract.IsErrorRateLimit(jsonData) {
-		s.gotRateLimit = true
-	}
+	logging.LogWarn0("ProcessData", "kept rate-limited response", "path", kept)
 }
 
 // deleteResponse removes a response that yielded no product.

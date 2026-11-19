@@ -53,8 +53,7 @@ func (a *App) ProcessResponses() error {
 	if a.Details == nil {
 		return errors.New("process-data: detail store is not configured")
 	}
-	_, err := a.Details.ProcessResponses(0)
-	return err
+	return a.Details.ProcessResponses()
 }
 
 // DedupePDP removes duplicate PDP response files.

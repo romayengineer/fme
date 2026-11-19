@@ -43,7 +43,7 @@ func (a *App) processResponses(action string, runErr error) error {
 		return fmt.Errorf("%s: detail store is not configured", action)
 	}
 
-	if _, err := a.Details.ProcessResponses(0); err != nil {
+	if err := a.Details.ProcessResponses(); err != nil {
 		a.Logger.Error(action+": process responses", "error", err)
 		return firstError(runErr, err)
 	}

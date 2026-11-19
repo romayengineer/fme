@@ -157,6 +157,40 @@ func TestForEachDetailReturnsDataDirectoryErrors(t *testing.T) {
 	}
 }
 
+func TestProcessDataKeepsRateLimitedResponses(t *testing.T) {
+	t.Chdir(t.TempDir())
+	dir := filepath.Join(paths.DataDir(), "Query")
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatalf("create response dir: %v", err)
+	}
+
+	original := filepath.Join(dir, "response_1700000000_000001.json")
+	body := `{"errors":[{"message":"Rate limit exceeded","code":1675004}]}`
+	writeTestFile(t, original, body)
+
+	if err := ProcessData(); err != nil {
+		t.Fatalf("ProcessData: %v", err)
+	}
+	assertRateLimitKept(t, dir, original, body)
+}
+
+// assertRateLimitKept checks the renamed throttled payload.
+func assertRateLimitKept(t *testing.T, dir, original, body string) {
+	t.Helper()
+
+	if _, err := os.Stat(original); !os.IsNotExist(err) {
+		t.Errorf("original rate-limited file still exists (err=%v)", err)
+	}
+	kept := filepath.Join(dir, "rate_limited_response_1700000000_000001.json")
+	content, err := os.ReadFile(kept) //nolint:gosec // temp test path.
+	if err != nil {
+		t.Fatalf("kept payload missing: %v", err)
+	}
+	if string(content) != body {
+		t.Errorf("kept payload = %q, want original body", content)
+	}
+}
+
 func TestLoadPDPProductIDsUsesFilenameThenPayload(t *testing.T) {
 	t.Chdir(t.TempDir())
 	dir := paths.PDPDir()

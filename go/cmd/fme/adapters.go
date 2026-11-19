@@ -20,8 +20,8 @@ type fileDetailStore struct{}
 
 func newFileDetailStore() *fileDetailStore { return &fileDetailStore{} }
 
-func (s *fileDetailStore) ProcessResponses(startTime int64) (int64, error) {
-	return filestore.ProcessData(startTime)
+func (s *fileDetailStore) ProcessResponses() error {
+	return filestore.ProcessData()
 }
 
 func (s *fileDetailStore) ForEachDetail(process func(filePath string, jsonData map[string]any) bool, sortit bool) (int, error) {

@@ -119,9 +119,9 @@ type fakeDetails struct {
 	stats       DescriptionStats
 }
 
-func (d *fakeDetails) ProcessResponses(int64) (int64, error) {
+func (d *fakeDetails) ProcessResponses() error {
 	d.processed++
-	return 0, d.err
+	return d.err
 }
 
 func (d *fakeDetails) ForEachDetail(process func(string, map[string]any) bool, _ bool) (int, error) {
