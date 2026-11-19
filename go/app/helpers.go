@@ -32,6 +32,9 @@ func (a *App) closeAuthenticatedSession(action string, session *Session) {
 	if session.Waiter != nil {
 		session.Waiter.Wait()
 	}
+	if session.Context == nil {
+		return
+	}
 	if err := session.Context.Close(); err != nil {
 		a.Logger.Error(action+": close browser context", "error", err)
 	}
