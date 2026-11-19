@@ -29,7 +29,13 @@ type ScheduleOptions struct {
 	PerTermDelay  time.Duration
 	ScrollSeconds int
 	DelayMs       int
-	MaxCycles     int
+	// DisableInlineDescriptions keeps each search search-only. The CLI enables
+	// inline pulling by default, so the zero value enables it.
+	DisableInlineDescriptions bool
+	DescriptionQueueLimit     int
+	RateLimitWaitSeconds      int
+	MaxRateLimitWaitSeconds   int
+	MaxCycles                 int
 	// RunNow ignores a future NextRunAt for the first cycle (used by -once).
 	// A rate-limit block is still honoured.
 	RunNow         bool
@@ -73,6 +79,9 @@ func withScheduleDefaults(opts ScheduleOptions) ScheduleOptions {
 	opts = withScheduleClock(opts)
 	if opts.Interval <= 0 {
 		opts.Interval = DefaultScheduleInterval
+	}
+	if opts.DescriptionQueueLimit <= 0 {
+		opts.DescriptionQueueLimit = DefaultDescriptionQueueLimit
 	}
 	return opts
 }
@@ -245,13 +254,13 @@ func (s *scheduler) searchTerm(ctx context.Context, index int, term string) (boo
 	}
 
 	s.state.LastTerm = term
-	result, err := s.search(term)
+	result, err := s.search(ctx, term)
 	if err != nil {
 		s.cycleErrors++
 		s.recordError(fmt.Errorf("search %q: %w", term, err))
 		return false, nil
 	}
-	return result.Throttled, nil
+	return result.Throttled || result.DescriptionRateLimited, nil
 }
 
 // pauseBetweenTerms spaces consecutive searches, skipping the first.
@@ -263,11 +272,16 @@ func (s *scheduler) pauseBetweenTerms(ctx context.Context, index int) error {
 }
 
 // search runs one Marketplace search without the interactive pause.
-func (s *scheduler) search(term string) (SearchResult, error) {
-	return s.app.Search(SearchOptions{
-		Keywords:      term,
-		ScrollDown:    true,
-		ScrollSeconds: s.opts.ScrollSeconds,
+func (s *scheduler) search(ctx context.Context, term string) (SearchResult, error) {
+	return s.app.SearchContext(ctx, SearchOptions{
+		Keywords:                term,
+		ScrollDown:              true,
+		ScrollSeconds:           s.opts.ScrollSeconds,
+		InlineDescriptions:      !s.opts.DisableInlineDescriptions,
+		DescriptionQueueLimit:   s.opts.DescriptionQueueLimit,
+		DelayMs:                 s.opts.DelayMs,
+		RateLimitWaitSeconds:    s.opts.RateLimitWaitSeconds,
+		MaxRateLimitWaitSeconds: s.opts.MaxRateLimitWaitSeconds,
 	})
 }
 

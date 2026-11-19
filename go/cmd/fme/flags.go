@@ -29,6 +29,8 @@ type Flags struct {
 	keywords                string
 	logLevel                string
 	scrollSeconds           int
+	inlineDescriptions      bool
+	descQueueLimit          int
 	delayMs                 int
 	rateLimitWaitSeconds    int
 	maxRateLimitWaitSeconds int
@@ -89,9 +91,11 @@ func registerFlags(flags *Flags) *optionalBool {
 	flag.StringVar(&flags.keywords, "keywords", "", "Keywords to search for (required when -action is search)")
 	flag.StringVar(&flags.logLevel, "log-level", "debug", "Log level: debug, info, warn, error")
 	flag.IntVar(&flags.scrollSeconds, "scroll-seconds", 240, "Max seconds to keep scrolling while the results stop growing (action=search, schedule)")
-	flag.IntVar(&flags.delayMs, "delay-ms", 1000, "Delay in milliseconds between replayed description requests (action=pull_description)")
-	flag.IntVar(&flags.rateLimitWaitSeconds, "rate-limit-wait", 300, "Seconds to wait before retrying a rate-limited request (action=pull_description; 0 disables waiting)")
-	flag.IntVar(&flags.maxRateLimitWaitSeconds, "max-rate-limit-wait", 1800, "Max total seconds to keep waiting for the rate limit to clear within a run (action=pull_description)")
+	flag.BoolVar(&flags.inlineDescriptions, "inline-descriptions", true, "Search: pull descriptions for new listings while searching (disable with -inline-descriptions=false)")
+	flag.IntVar(&flags.descQueueLimit, "desc-queue-limit", app.DefaultDescriptionQueueLimit, "Search: max listing ids waiting for a description pull")
+	flag.IntVar(&flags.delayMs, "delay-ms", 1000, "Delay in milliseconds between replayed description requests (action=search, pull_description, schedule)")
+	flag.IntVar(&flags.rateLimitWaitSeconds, "rate-limit-wait", 300, "Seconds to wait before retrying a rate-limited request (action=search, pull_description, schedule; 0 disables waiting)")
+	flag.IntVar(&flags.maxRateLimitWaitSeconds, "max-rate-limit-wait", 1800, "Max total seconds to keep waiting for the rate limit to clear within a run (action=search, pull_description, schedule)")
 	flag.Float64Var(&flags.cellDeg, "cell", 0.01, "Heat map grid cell size in degrees (action=heatmap)")
 	flag.StringVar(&flags.out, "out", "", "Heat map output base path without extension (action=heatmap; default $FME_DATA_DIR/analytics/heatmap)")
 	flag.StringVar(&flags.dir, "dir", "", "Detail files directory (action=heatmap; default $FME_DATA_DIR/__Details)")

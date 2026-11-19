@@ -3,8 +3,11 @@ package app
 // Session is one authenticated browser context plus the page surfaces and the
 // capture handlers that must be drained before it is closed.
 type Session struct {
-	Page    Page
-	Pages   Pages
+	Page  Page
+	Pages Pages
+	// NewPage opens an additional page in the same authenticated context. Search
+	// uses it for the description worker so scrolling cannot cancel a fetch.
+	NewPage func() (Page, Pages, error)
 	Waiter  Waiter
 	Context Closer
 }

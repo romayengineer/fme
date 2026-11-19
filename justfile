@@ -81,11 +81,11 @@ install: build
 run *args: _sync-profile
     go run ./{{cmd}} {{args}}
 
-# Search Marketplace for a keyword, e.g. `just search "macbook m1"`
+# Search Marketplace for a keyword and pull new descriptions in the same run
 search keyword *args: _sync-profile
     go run ./{{cmd}} -action=search -keywords="{{keyword}}" {{args}}
 
-# Pull descriptions for all details missing one (opens any listing to grab the PDP template)
+# Catch up descriptions for all details missing one (opens any listing to grab the PDP template)
 pull-description *args: _sync-profile
     go run ./{{cmd}} -action=pull_description {{args}}
 

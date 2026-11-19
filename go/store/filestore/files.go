@@ -31,17 +31,31 @@ func SaveProductsIfAny(products []model.MarketplaceItemDetails) bool {
 	return len(products) > 0
 }
 
-// saveProductIfValid merges one product into its detail record.
-func saveProductIfValid(product model.MarketplaceItemDetails) {
+// SaveProductsReturningIDs merges products into their detail records and returns
+// the ids that were persisted.
+func SaveProductsReturningIDs(products []model.MarketplaceItemDetails) []string {
+	ids := make([]string, 0, len(products))
+	for _, product := range products {
+		if productID, ok := saveProductIfValid(product); ok {
+			ids = append(ids, productID)
+		}
+	}
+	return ids
+}
+
+// saveProductIfValid merges one product into its detail record and returns its id.
+func saveProductIfValid(product model.MarketplaceItemDetails) (string, bool) {
 	productID, ok := product.ID.(string)
 	if !ok || productID == "" {
 		logging.LogWarn0("SaveProductsIfAny", "skipping product without a valid id", "id", product.ID)
-		return
+		return "", false
 	}
 
 	if _, err := NewProductFileStore(productID).Save(product); err != nil {
 		logging.LogError0("SaveProductsIfAny", "error saving product", "id", productID, "error", err)
+		return "", false
 	}
+	return productID, true
 }
 
 // SaveProductsFrom extracts products from in-memory response JSON and merges them
@@ -64,6 +78,7 @@ type processState struct {
 	filesProcessed int
 	filesDeleted   int
 	gotRateLimit   bool
+	savedIDs       []string
 }
 
 // ProcessData extracts products from every captured response, deletes
@@ -89,7 +104,9 @@ func ProcessData() error {
 func (s *processState) process(filePath string, jsonData map[string]any) bool {
 	s.filesProcessed++
 
-	if SaveProductsIfAny(s.extractors.ExtractAll(jsonData)) {
+	products := s.extractors.ExtractAll(jsonData)
+	s.savedIDs = append(s.savedIDs, SaveProductsReturningIDs(products)...)
+	if len(products) > 0 {
 		return true
 	}
 	if extract.IsErrorRateLimit(jsonData) {
@@ -120,6 +137,125 @@ func (s *processState) deleteResponse(filePath string) {
 		logging.LogError0("ProcessData", "error deleting file", "path", filePath, "error", err)
 	}
 	s.filesDeleted++
+}
+
+// MaterializeNewResponses extracts products from response files written at or
+// after since that are not yet in seen. It returns the ids that were persisted
+// and how many files it processed. It mirrors ProcessData: responses without a
+// product are deleted and rate-limited payloads are kept for diagnosis.
+//
+// seen is owned by the caller and records every file this function has already
+// looked at, so a long-running search can poll for new captures cheaply.
+func MaterializeNewResponses(since time.Time, seen map[string]struct{}, limit int) ([]string, int, error) {
+	if seen == nil {
+		return nil, 0, errors.New("materialize responses: seen map is required")
+	}
+	if limit <= 0 {
+		limit = 1
+	}
+
+	filePaths, err := getNewResponsePaths()
+	if err != nil {
+		return nil, 0, err
+	}
+
+	state := &processState{extractors: extract.NewProductExtractors()}
+	processed := processNewResponses(filePaths, since, seen, limit, state)
+	return state.savedIDs, processed, nil
+}
+
+// processNewResponses processes up to limit response files that are newer than
+// since and not yet in seen.
+func processNewResponses(filePaths []string, since time.Time, seen map[string]struct{}, limit int, state *processState) int {
+	sinceNano := since.UnixNano()
+	processed := 0
+
+	for _, filePath := range filePaths {
+		if !newResponseFile(filePath, sinceNano, seen) {
+			continue
+		}
+		if state.processFile(filePath) {
+			processed++
+		}
+		if processed >= limit {
+			break
+		}
+	}
+
+	return processed
+}
+
+// newResponseFile marks filePath as seen and reports whether it was written at
+// or after since.
+func newResponseFile(filePath string, sinceNano int64, seen map[string]struct{}) bool {
+	if _, done := seen[filePath]; done {
+		return false
+	}
+	seen[filePath] = struct{}{}
+
+	timestamp, err := GetTimestamp(filePath)
+	return err == nil && timestamp >= sinceNano
+}
+
+// processFile reads and processes one captured response, reporting success.
+func (s *processState) processFile(filePath string) bool {
+	jsonData, err := readJSONObject(filePath)
+	if err != nil {
+		logging.LogError0("MaterializeNewResponses", "could not read file", "path", filePath, "error", err)
+		return false
+	}
+
+	s.process(filePath, jsonData)
+	return true
+}
+
+// incrementalSkipDirs are data subdirectories that cannot contain new search
+// responses.
+var incrementalSkipDirs = map[string]struct{}{
+	paths.DetailDirName:   {},
+	paths.PDPDirName:      {},
+	paths.ArchivedDirName: {},
+	"analytics":           {},
+	paths.DebugDirName:    {},
+}
+
+// getNewResponsePaths lists timestamped responses that can belong to a search
+// run. It skips the PDP directory, which can hold tens of thousands of id-keyed
+// responses; the incremental producer polls this list while searching.
+func getNewResponsePaths() ([]string, error) {
+	root := paths.DataDir()
+	filePaths := []string{}
+
+	visit := func(path string, entry fs.DirEntry, err error) error {
+		return collectIncrementalPath(&filePaths, path, entry, err, root)
+	}
+
+	if err := filepath.WalkDir(root, visit); err != nil {
+		return nil, fmt.Errorf("walk %s: %w", root, err)
+	}
+	orderFiles(filePaths, true)
+	return filePaths, nil
+}
+
+// collectIncrementalPath appends one path to the incremental response list and
+// skips excluded directories.
+func collectIncrementalPath(filePaths *[]string, path string, entry fs.DirEntry, err error, root string) error {
+	if err != nil {
+		return err
+	}
+	if entry.IsDir() && path != root && skipIncrementalDir(entry.Name()) {
+		return filepath.SkipDir
+	}
+
+	*filePaths = appendDataFile(*filePaths, path, entry, "response_")
+	return nil
+}
+
+// skipIncrementalDir reports whether a data subdirectory is excluded from the
+// incremental response scan.
+func skipIncrementalDir(name string) bool {
+	_, skip := incrementalSkipDirs[name]
+	return skip
 }
 
 // GetTimestamp reads the timestamp embedded in a response filename.

@@ -99,23 +99,35 @@ func (f *browserSessionFactory) Close() error {
 // newSession builds the app session surface from an authenticated context.
 func (f *browserSessionFactory) newSession(ctx driver.ContextWrapperInterface) (*app.Session, error) {
 	handlers := capture.SetContextEventHandlers(ctx, f.blockImages, f.sink)
-	page, err := ctx.NewPage()
+	page, pages, err := newSessionPage(ctx)
 	if err != nil {
 		_ = ctx.Close()
-		return nil, fmt.Errorf("create page: %w", err)
-	}
-	pages, err := marketplace.NewPages(page)
-	if err != nil {
-		_ = ctx.Close()
-		return nil, fmt.Errorf("create page helpers: %w", err)
+		return nil, err
 	}
 
 	return &app.Session{
-		Page:    page,
-		Pages:   pages,
+		Page:  page,
+		Pages: pages,
+		NewPage: func() (app.Page, app.Pages, error) {
+			return newSessionPage(ctx)
+		},
 		Waiter:  handlers,
 		Context: ctx,
 	}, nil
+}
+
+// newSessionPage opens one authenticated page and its page objects.
+func newSessionPage(ctx driver.ContextWrapperInterface) (app.Page, app.Pages, error) {
+	page, err := ctx.NewPage()
+	if err != nil {
+		return nil, nil, fmt.Errorf("create page: %w", err)
+	}
+	pages, err := marketplace.NewPages(page)
+	if err != nil {
+		_ = page.Close()
+		return nil, nil, fmt.Errorf("create page helpers: %w", err)
+	}
+	return page, pages, nil
 }
 
 // openContext restores the configured profile or logs in with credentials.

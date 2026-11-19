@@ -81,12 +81,7 @@ func (a *App) PullDescriptions(opts PullDescriptionsOptions) (PullResult, error)
 	}
 	defer a.closeAuthenticatedSession("pull-description", session)
 
-	state := &pullState{
-		app:         a,
-		opts:        opts,
-		existing:    plan.existing,
-		unavailable: plan.unavailable,
-	}
+	state := newPullState(a, opts, plan.existing, plan.unavailable)
 	runErr = a.pullAll(state, session.Page, session.Pages, runErr)
 	a.logPullSummary(state)
 
@@ -109,10 +104,9 @@ func (a *App) validatePullConfig() error {
 
 // planPull reports which listings still need a description.
 func (a *App) planPull(opts PullDescriptionsOptions) (*pullPlan, bool, error) {
-	existing := a.Details.LoadPDPProductIDs()
+	existing, unavailable := a.loadPullMaps(opts)
 	a.Logger.Info("pull-description: loaded existing PDP responses", "count", len(existing))
 
-	unavailable := a.loadUnavailable(opts)
 	pending, alreadyFetched, unavailableSkipped, err := a.Details.PendingDescriptions(existing, unavailable)
 	if err != nil {
 		return nil, false, fmt.Errorf("pull-description: scan pending descriptions: %w", err)
@@ -125,6 +119,31 @@ func (a *App) planPull(opts PullDescriptionsOptions) (*pullPlan, bool, error) {
 
 	a.Logger.Info("pull-description: pending descriptions", "pending", pending)
 	return &pullPlan{existing: existing, unavailable: unavailable, pending: pending}, false, nil
+}
+
+// loadPullMaps returns the ids that already have a PDP response and the ones
+// tombstoned as unavailable.
+func (a *App) loadPullMaps(opts PullDescriptionsOptions) (existing, unavailable map[string]struct{}) {
+	existing = a.Details.LoadPDPProductIDs()
+	unavailable = a.loadUnavailable(opts)
+	return existing, unavailable
+}
+
+// newPullState builds the counters shared by a full description pass and the
+// inline worker started by Search.
+func newPullState(a *App, opts PullDescriptionsOptions, existing, unavailable map[string]struct{}) *pullState {
+	if existing == nil {
+		existing = map[string]struct{}{}
+	}
+	if unavailable == nil {
+		unavailable = map[string]struct{}{}
+	}
+	return &pullState{
+		app:         a,
+		opts:        opts,
+		existing:    existing,
+		unavailable: unavailable,
+	}
 }
 
 // loadUnavailable returns the tombstoned ids, unless a retry was requested.

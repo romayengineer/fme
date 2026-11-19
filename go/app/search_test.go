@@ -25,6 +25,7 @@ type fakePages struct {
 	gotos     []string
 	opened    int
 	throttled bool
+	gate      func() bool
 }
 
 func (p *fakePages) MarketplaceSearch(keywords string, _ bool, _ int) error {
@@ -45,6 +46,8 @@ func (p *fakePages) OpenProduct(int) bool {
 }
 
 func (p *fakePages) IsThrottled() bool { return p.throttled }
+
+func (p *fakePages) SetScrollGate(gate func() bool) { p.gate = gate }
 
 // fakeCloser records context shutdown.
 type fakeCloser struct {
@@ -93,14 +96,16 @@ type fakePDPFetcher struct {
 	outcome  PDPOutcome
 	err      error
 	fetches  int
+	fetched  []string
 }
 
 func (f *fakePDPFetcher) Template(int) (PDPTemplate, bool) {
 	return f.template, f.template != nil
 }
 
-func (f *fakePDPFetcher) Fetch(Page, PDPTemplate, string) (PDPOutcome, error) {
+func (f *fakePDPFetcher) Fetch(_ Page, _ PDPTemplate, productID string) (PDPOutcome, error) {
 	f.fetches++
+	f.fetched = append(f.fetched, productID)
 	return f.outcome, f.err
 }
 
@@ -117,6 +122,10 @@ type fakeDetails struct {
 	pruned      int
 	archiveErr  error
 	stats       DescriptionStats
+
+	materializeBatches [][]string
+	materializeCalls   int
+	materializeErr     error
 }
 
 func (d *fakeDetails) ProcessResponses() error {
@@ -142,6 +151,20 @@ func (d *fakeDetails) LoadPDPProductIDs() map[string]struct{} {
 
 func (d *fakeDetails) PendingDescriptions(map[string]struct{}, map[string]struct{}) (int, int, int, error) {
 	return d.pending, 0, 0, nil
+}
+
+func (d *fakeDetails) MaterializeNewResponses(time.Time, map[string]struct{}, int) ([]string, int, error) {
+	d.materializeCalls++
+	if d.materializeErr != nil {
+		return nil, 0, d.materializeErr
+	}
+	if len(d.materializeBatches) == 0 {
+		return nil, 0, nil
+	}
+
+	ids := d.materializeBatches[0]
+	d.materializeBatches = d.materializeBatches[1:]
+	return ids, 1, nil
 }
 func (d *fakeDetails) FillEmpty() error { return d.fillErr }
 func (d *fakeDetails) DedupePDP()       { d.dedupeCalls++ }

@@ -24,15 +24,19 @@ func runSchedule(a *app.App, flags Flags) error {
 	defer stop()
 
 	opts := app.ScheduleOptions{
-		Terms:          terms,
-		Interval:       flags.interval,
-		PerTermDelay:   flags.perTermDelay,
-		ScrollSeconds:  flags.scrollSeconds,
-		DelayMs:        flags.scheduleDelayMs,
-		ArchiveOptions: app.ArchiveOptions{OlderThan: flags.archiveAfter, KeepArchive: flags.keepArchived},
-		StatePath:      paths.SchedulerStatePath(),
-		LockPath:       paths.SchedulerLockPath(),
-		RefreshProfile: refreshProfile,
+		Terms:                     terms,
+		Interval:                  flags.interval,
+		PerTermDelay:              flags.perTermDelay,
+		ScrollSeconds:             flags.scrollSeconds,
+		DelayMs:                   flags.scheduleDelayMs,
+		DisableInlineDescriptions: !flags.inlineDescriptions,
+		DescriptionQueueLimit:     flags.descQueueLimit,
+		RateLimitWaitSeconds:      flags.rateLimitWaitSeconds,
+		MaxRateLimitWaitSeconds:   flags.maxRateLimitWaitSeconds,
+		ArchiveOptions:            app.ArchiveOptions{OlderThan: flags.archiveAfter, KeepArchive: flags.keepArchived},
+		StatePath:                 paths.SchedulerStatePath(),
+		LockPath:                  paths.SchedulerLockPath(),
+		RefreshProfile:            refreshProfile,
 	}
 	if flags.once {
 		opts.MaxCycles = 1

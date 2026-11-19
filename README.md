@@ -5,7 +5,9 @@ Playwright, intercepting Facebook's GraphQL responses, and materializing them as
 (`data/__Details/detail_<id>.json`) plus an optional PocketBase database.
 
 The most valuable field, `redacted_description`, is **not** in the search feed: it comes
-from a separate Product Detail Page (PDP) request. See
+from a separate Product Detail Page (PDP) request. `just search` now pulls those
+descriptions for new listings while it searches, through a bounded queue, so listings
+do not sit on disk until they expire. See
 [docs/redacted_description.md](docs/redacted_description.md) for how that works.
 
 Heat maps of the collected listings are rendered by the `analytics` module. Some
@@ -97,8 +99,8 @@ you to log in first. Without a profile it also accepts `FME_USERNAME`/`FME_PASSW
 |---|---|
 | `just setup` | One-time (idempotent) bootstrap |
 | `just doctor` | Diagnose a partial/broken setup (read-only) |
-| `just search "macbook m1"` | Collect listings for a keyword into `data/__Details` |
-| `just pull-description` | Fill missing `Description` fields via the PDP request |
+| `just search "macbook m1"` | Collect listings for a keyword and pull their descriptions in the same run |
+| `just pull-description` | Catch up missing `Description` fields via the PDP request |
 | `just get-details` | Visit each known listing to fetch its details |
 | `just process-data` | Re-extract listings from captured responses (no browser) |
 | `just fill-empty` | Backfill missing URLs on existing detail files |
@@ -125,9 +127,10 @@ a terminal, so you can inspect the page; piped/cron runs continue automatically.
 ## Running unattended
 
 `just daemon` runs the scraper on a schedule: it searches every term in
-`search-terms.txt`, pulls descriptions for new listings, dedupes/archives
-responses, and retries automatically when Facebook throttles the account. The
-recommended deployment is a systemd user service:
+`search-terms.txt` while pulling descriptions for newly discovered listings,
+then runs a catch-up description pass, dedupes/archives responses, and retries
+automatically when Facebook throttles the account. The recommended deployment is
+a systemd user service:
 
 ```bash
 $EDITOR search-terms.txt   # your Marketplace queries, one per line

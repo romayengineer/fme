@@ -36,6 +36,10 @@ func (s *fileDetailStore) PendingDescriptions(existing, unavailable map[string]s
 	return filestore.PendingDescriptionCount(existing, unavailable)
 }
 
+func (s *fileDetailStore) MaterializeNewResponses(since time.Time, seen map[string]struct{}, limit int) ([]string, int, error) {
+	return filestore.MaterializeNewResponses(since, seen, limit)
+}
+
 func (s *fileDetailStore) FillEmpty() error { return filestore.FillEmpty() }
 
 func (s *fileDetailStore) DedupePDP() { filestore.DedupePDP() }

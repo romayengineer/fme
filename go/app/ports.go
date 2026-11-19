@@ -30,6 +30,9 @@ type Pages interface {
 	// IsThrottled reports whether the last navigation hit Facebook's
 	// throttling page.
 	IsThrottled() bool
+	// SetScrollGate installs a callback checked before each scroll step.
+	// Returning false stops the scroll early; nil removes the gate.
+	SetScrollGate(gate func() bool)
 }
 
 // PDPTemplate is an opaque request template captured from Facebook. The
@@ -61,6 +64,10 @@ type DetailStore interface {
 	LoadPDPProductIDs() map[string]struct{}
 	// PendingDescriptions counts records still missing a description.
 	PendingDescriptions(existing, unavailable map[string]struct{}) (pending, alreadyFetched, unavailableCount int, err error)
+	// MaterializeNewResponses extracts products from response files written at
+	// or after since that are not yet in seen, saves their detail records, and
+	// returns the saved product ids plus how many files it processed.
+	MaterializeNewResponses(since time.Time, seen map[string]struct{}, limit int) (ids []string, processed int, err error)
 	// FillEmpty backfills missing URLs.
 	FillEmpty() error
 	// DedupePDP removes duplicate PDP response files.

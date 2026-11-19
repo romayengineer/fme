@@ -33,8 +33,9 @@ Extracted in `ProductDetailsGet` (`go/marketplace/extract/extract.go`) into `Mar
 2. **A real PDP request must be triggered by opening a listing.**
    Facebook only sends the `MarketplacePDPContainerQuery` request when a listing is
    opened through a **client-side click** on a search result. A plain URL navigation
-   (`Page.Goto`) does **not** reliably trigger it. That is why, after the search,
-   `Pages.OpenFirstProduct` clicks the first listing link.
+   (`Page.Goto`) does **not** reliably trigger it. That is why the description worker
+   opens Marketplace and calls `Pages.OpenProduct`, which clicks a listing link, to
+   capture the reusable request template.
 
 3. **The response must be intercepted.**
    `ContextEventHandlers.OnResponse` (`go/capture/context_manager.go`) listens for requests
@@ -54,16 +55,31 @@ Extracted in `ProductDetailsGet` (`go/marketplace/extract/extract.go`) into `Mar
 
 ## Flow
 
-Two commands, normally run in order:
+`just search` collects listings and pulls their descriptions in the same run.
+`just pull-description` remains the catch-up pass for listings that are still
+missing one (older data, interrupted runs, or a search that hit a rate limit).
 
-### `just search "keyword"` — collect listings
+### `just search "keyword"` — collect listings and pull descriptions
 1. Log in with the seeded Chrome profile (`FME_USER_DATA_DIR`).
 2. `MarketpaceSearch` navigates to the Marketplace search URL and scrolls, stopping
    only after `-scroll-seconds` (default 240) pass with no increase in page height.
 3. Search responses are captured as `CometMarketplaceSearchContentPaginationQuery`.
-4. `ProcessData` runs at the end of the search and extracts them into
-   `data/__Details/detail_<id>.json` (without descriptions), so searching alone
-   materializes new listings.
+4. A producer materializes new responses into `data/__Details/detail_<id>.json` as
+   they arrive and pushes their ids into a bounded FIFO (queue limit 50). A worker
+   on a second page captures the PDP request template (Marketplace home -> click a
+   listing) and replays it for one listing at a time, merging each description as
+   soon as the response arrives.
+5. While the queue is full, scrolling pauses, so search does not discover more
+   listings than the worker can describe. Paused time does not count against
+   `-scroll-seconds`.
+6. When scrolling ends, the producer does a final sweep and the worker drains the
+   queue before the process exits (`ProcessData` still runs as a safety net).
+7. If the worker hits the rate limit, it stops, scrolling stops, and the remaining
+   listings stay for `pull-description` or the next scheduler cycle.
+
+Flags: `-inline-descriptions=false` restores search-only mode,
+`-desc-queue-limit` changes the queue size, and `-delay-ms`,
+`-rate-limit-wait`, `-max-rate-limit-wait` control the PDP requests.
 
 ### `just pull-description` — fetch missing descriptions
 1. `ProcessData` runs first, materializing any unprocessed search responses so newly

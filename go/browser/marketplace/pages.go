@@ -20,6 +20,9 @@ type Pages struct {
 	InputPassword  string
 	ButtonLogIn    string
 	InputSearchBar string
+	// ScrollGate, when set, is checked before each scroll step. It can block
+	// while the description pipeline catches up; returning false stops scrolling.
+	ScrollGate func() bool
 }
 
 // AuthPage reports whether the Facebook session is usable.
@@ -38,6 +41,8 @@ type SearchPage interface {
 	MarketplaceHome() error
 	// ScrollDown scrolls until the page height stops growing for maxSeconds.
 	ScrollDown(maxSeconds int) error
+	// SetScrollGate installs a callback checked before each scroll step.
+	SetScrollGate(gate func() bool)
 }
 
 // ProductPage opens individual Marketplace listings.
@@ -145,6 +150,12 @@ func (pl *Pages) ScrollDown(maxSeconds int) error {
 	return pl.scrollUntilStable(maxSeconds)
 }
 
+// SetScrollGate installs a callback checked before each scroll step. Returning
+// false stops the scroll early; nil removes the gate.
+func (pl *Pages) SetScrollGate(gate func() bool) {
+	pl.ScrollGate = gate
+}
+
 // scrollUntilStable scrolls until the page height is stable for maxSeconds.
 func (pl *Pages) scrollUntilStable(maxSeconds int) error {
 	start := time.Now()
@@ -152,8 +163,17 @@ func (pl *Pages) scrollUntilStable(maxSeconds int) error {
 	maxScrollHeight := 0
 
 	for {
+		gateWait, ok := pl.waitForScrollGate()
+		if !ok {
+			logging.LogInfo0("ScrollDown", "scroll gate stopped the search",
+				"elapsedSeconds", int(time.Since(start).Seconds()))
+			return nil
+		}
+		// Paused time is not idle time: shift the idle deadline by the pause.
+		lastIncrease = lastIncrease.Add(gateWait)
+
 		// Stop only after the page height has failed to grow for maxSeconds.
-		if time.Since(lastIncrease) >= time.Duration(maxSeconds)*time.Second {
+		if pl.scrollIdle(lastIncrease, maxSeconds) {
 			logging.LogInfo0("ScrollDown", "no height increase, stopping",
 				"waitedSeconds", maxSeconds, "elapsedSeconds", int(time.Since(start).Seconds()), "maxScrollHeight", maxScrollHeight)
 			return nil
@@ -163,12 +183,35 @@ func (pl *Pages) scrollUntilStable(maxSeconds int) error {
 		if err != nil {
 			return err
 		}
-		if height > maxScrollHeight {
-			lastIncrease = time.Now()
-			maxScrollHeight = height
-			logging.LogDebug0("ScrollDown", "maxScrollHeight", "height", maxScrollHeight)
-		}
+		maxScrollHeight = pl.recordHeight(height, maxScrollHeight, &lastIncrease)
 	}
+}
+
+// scrollIdle reports whether the page height has not grown for maxSeconds.
+func (pl *Pages) scrollIdle(lastIncrease time.Time, maxSeconds int) bool {
+	return time.Since(lastIncrease) >= time.Duration(maxSeconds)*time.Second
+}
+
+// recordHeight updates the high-water mark and the last growth time.
+func (pl *Pages) recordHeight(height, maxScrollHeight int, lastIncrease *time.Time) int {
+	if height <= maxScrollHeight {
+		return maxScrollHeight
+	}
+
+	*lastIncrease = time.Now()
+	logging.LogDebug0("ScrollDown", "maxScrollHeight", "height", height)
+	return height
+}
+
+// waitForScrollGate runs the configured gate and reports how long it waited.
+func (pl *Pages) waitForScrollGate() (time.Duration, bool) {
+	if pl.ScrollGate == nil {
+		return 0, true
+	}
+
+	waitStart := time.Now()
+	ok := pl.ScrollGate()
+	return time.Since(waitStart), ok
 }
 
 // scrollOnce scrolls to the bottom and returns the page height.

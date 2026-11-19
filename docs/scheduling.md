@@ -43,14 +43,17 @@ systemctl --user restart fme-schedule.service
 
 Keep the list short and specific. Each term costs one search (up to
 `-scroll-seconds`, default 240, of scrolling while the feed keeps growing) and
-can add listings whose descriptions must be pulled afterwards.
+adds listings whose descriptions are pulled in the same search pass. A catch-up
+description pass still runs after all terms.
 
 ## What a cycle does
 
 1. Refreshes the copied Chrome profile (`scripts/sync-profile.sh --auto`), so a
    re-login in normal Chrome is picked up without manual work.
 2. Searches every term, pausing `-per-term-delay` between consecutive searches.
-3. Pulls every listing whose `Description` is still null, pausing
+   Each search also pulls descriptions for the listings it discovers through a
+   bounded FIFO (queue limit 50); scrolling pauses while the queue is full.
+3. Runs a catch-up description pass for any listing still missing one, pausing
    `-schedule-delay-ms` between replayed PDP requests.
 4. Dedupes PDP responses and archives processed search responses.
 5. Writes `data/scheduler-state.json` and sleeps until the next cycle
@@ -135,7 +138,11 @@ journalctl --user -u fme-schedule --since "1 hour ago"
 | `-interval` | `6h` | Pause between cycle starts |
 | `-per-term-delay` | `10m` | Pause between consecutive searches |
 | `-scroll-seconds` | `240` | Max scroll wait per search (0 disables scrolling) |
+| `-inline-descriptions` | `true` | Pull new descriptions during each search (disable with `=false`) |
+| `-desc-queue-limit` | `50` | Max listing ids waiting for a description pull |
 | `-schedule-delay-ms` | `2000` | Delay between description requests |
+| `-rate-limit-wait` | `300` | Initial wait before retrying a rate-limited PDP request |
+| `-max-rate-limit-wait` | `1800` | Max total wait for the rate limit to clear per run |
 | `-archive-after` | `168h` | Age before processed responses are archived |
 | `-keep-archived` | `720h` | Age before archived responses are deleted |
 | `-once` | `false` | Run one cycle now and exit (a current block is still honoured) |

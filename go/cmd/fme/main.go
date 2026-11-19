@@ -17,10 +17,15 @@ type actionFunc func(*app.App, Flags) error
 var actionRegistry = map[string]actionFunc{
 	"search": func(a *app.App, flags Flags) error {
 		_, err := a.Search(app.SearchOptions{
-			Keywords:      flags.keywords,
-			ScrollDown:    true,
-			ScrollSeconds: flags.scrollSeconds,
-			Pause:         waitForInput,
+			Keywords:                flags.keywords,
+			ScrollDown:              true,
+			ScrollSeconds:           flags.scrollSeconds,
+			Pause:                   waitForInput,
+			InlineDescriptions:      flags.inlineDescriptions,
+			DescriptionQueueLimit:   flags.descQueueLimit,
+			DelayMs:                 flags.delayMs,
+			RateLimitWaitSeconds:    flags.rateLimitWaitSeconds,
+			MaxRateLimitWaitSeconds: flags.maxRateLimitWaitSeconds,
 		})
 		return err
 	},
