@@ -6,7 +6,7 @@ toolchain go1.25.14
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/pocketbase/dbx v1.10.1
+	github.com/pocketbase/dbx v1.12.0
 	github.com/pocketbase/pocketbase v0.21.3
 	github.com/romayengineer/fme/go/core v0.0.0
 	github.com/romayengineer/fme/go/marketplace v0.0.0
